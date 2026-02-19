@@ -1,7 +1,21 @@
 import { useState, useEffect } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { Plus, Trash2, Edit2, Check, X, Wallet, CreditCard, Home, Banknote, ChevronDown, ChevronUp, GripVertical, Copy, TrendingUp } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  Edit2,
+  Check,
+  X,
+  Wallet,
+  CreditCard,
+  Home,
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+  Copy,
+  TrendingUp,
+} from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card } from './ui/card';
@@ -33,17 +47,19 @@ interface MonthlyBudgetProps {
   selectedMonth: number;
 }
 
-const defaultFixedCosts = [
+const defaultFixedCosts: BudgetItem[] = [
   { id: '1', name: '핸드폰 통신비', amount: 0, subItems: [] },
   { id: '2', name: '티빙', amount: 0, subItems: [] },
   { id: '3', name: '쿠팡', amount: 0, subItems: [] },
   { id: '4', name: '월세', amount: 0, subItems: [] },
 ];
 
+type BudgetCategory = 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses';
+
 interface DraggableItemProps {
   item: BudgetItem;
   index: number;
-  category: 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses';
+  category: BudgetCategory;
   moveItem: (dragIndex: number, hoverIndex: number) => void;
   renderContent: () => React.ReactNode;
 }
@@ -68,11 +84,7 @@ const DraggableItem = ({ item, index, category, moveItem, renderContent }: Dragg
   });
 
   return (
-    <div
-      ref={(node) => drag(drop(node))}
-      style={{ opacity: isDragging ? 0.5 : 1 }}
-      className="cursor-move"
-    >
+    <div ref={(node) => drag(drop(node))} style={{ opacity: isDragging ? 0.5 : 1 }} className="cursor-move">
       {renderContent()}
     </div>
   );
@@ -89,10 +101,11 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
       return {
         ...parsedData,
         income: parsedData.income || [],
-        fixedCosts: parsedData.fixedCosts?.map((item: BudgetItem) => ({
-          ...item,
-          subItems: item.subItems || []
-        })) || defaultFixedCosts,
+        fixedCosts:
+          parsedData.fixedCosts?.map((item: BudgetItem) => ({
+            ...item,
+            subItems: item.subItems || [],
+          })) || defaultFixedCosts,
       };
     }
     return {
@@ -113,10 +126,11 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
       setData({
         ...parsedData,
         income: parsedData.income || [],
-        fixedCosts: parsedData.fixedCosts?.map((item: BudgetItem) => ({
-          ...item,
-          subItems: item.subItems || []
-        })) || defaultFixedCosts,
+        fixedCosts:
+          parsedData.fixedCosts?.map((item: BudgetItem) => ({
+            ...item,
+            subItems: item.subItems || [],
+          })) || defaultFixedCosts,
       });
     } else {
       setData({
@@ -139,39 +153,38 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
     localStorage.setItem(getStorageKey(selectedMonth), JSON.stringify(data));
   }, [data, selectedMonth]);
 
-  // 2월 데이터를 모든 월로 복제
+  // ✅ 1월 데이터를 모든 월로 복제
   const copyToAllMonths = () => {
-    const currentData = localStorage.getItem('monthlyBudget_2');
-    if (!currentData) {
-      alert('2월 데이터가 없습니다.');
+    const janData = localStorage.getItem('monthlyBudget_1');
+    if (!janData) {
+      alert('1월 데이터가 없습니다. (먼저 1월에 값을 입력해 주세요)');
       return;
     }
-    
-    if (!confirm('2월 데이터를 1월부터 12월까지 모든 월에 복제하시겠습니까?')) {
+
+    if (!confirm('1월 데이터를 1월부터 12월까지 모든 월에 복제하시겠습니까?')) {
       return;
     }
 
     for (let month = 1; month <= 12; month++) {
-      localStorage.setItem(`monthlyBudget_${month}`, currentData);
+      localStorage.setItem(`monthlyBudget_${month}`, janData);
     }
-    
+
     // 현재 선택된 월 데이터 다시 로드
-    setData(JSON.parse(currentData));
-    alert('2월 데이터가 모든 월에 복제되었습니다.');
+    setData(JSON.parse(janData));
+    alert('1월 데이터가 모든 월에 복제되었습니다.');
   };
 
-  const addItem = (category: 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses') => {
-    const hasSubItems = category !== 'fixedCosts';
+  const addItem = (category: BudgetCategory) => {
     const newItem: BudgetItem = {
       id: Date.now().toString(),
       name: '새 항목',
       amount: 0,
-      subItems: hasSubItems || category === 'fixedCosts' ? [] : undefined,
+      subItems: [],
     };
     setData({ ...data, [category]: [...data[category], newItem] });
   };
 
-  const deleteItem = (category: 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses', id: string) => {
+  const deleteItem = (category: BudgetCategory, id: string) => {
     setData({
       ...data,
       [category]: data[category].filter((item) => item.id !== id),
@@ -183,7 +196,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
     setEditValue({ name: item.name, amount: item.amount });
   };
 
-  const saveEdit = (category: 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses') => {
+  const saveEdit = (category: BudgetCategory) => {
     if (!editingId) return;
     setData({
       ...data,
@@ -199,16 +212,13 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
   };
 
   const toggleExpand = (itemId: string) => {
-    const newExpanded = new Set(expandedItems);
-    if (newExpanded.has(itemId)) {
-      newExpanded.delete(itemId);
-    } else {
-      newExpanded.add(itemId);
-    }
-    setExpandedItems(newExpanded);
+    const next = new Set(expandedItems);
+    if (next.has(itemId)) next.delete(itemId);
+    else next.add(itemId);
+    setExpandedItems(next);
   };
 
-  const addSubItem = (category: 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses', itemId: string) => {
+  const addSubItem = (category: BudgetCategory, itemId: string) => {
     const today = new Date().toISOString().split('T')[0];
     const newSubItem: SubItem = {
       id: Date.now().toString(),
@@ -219,39 +229,26 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
     setData({
       ...data,
       [category]: data[category].map((item) =>
-        item.id === itemId
-          ? { ...item, subItems: [...(item.subItems || []), newSubItem] }
-          : item
+        item.id === itemId ? { ...item, subItems: [...(item.subItems || []), newSubItem] } : item
       ),
     });
   };
 
-  const updateSubItem = (
-    category: 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses',
-    itemId: string,
-    subItemId: string,
-    updates: Partial<SubItem>
-  ) => {
+  const updateSubItem = (category: BudgetCategory, itemId: string, subItemId: string, updates: Partial<SubItem>) => {
     setData({
       ...data,
       [category]: data[category].map((item) =>
         item.id === itemId
           ? {
               ...item,
-              subItems: (item.subItems || []).map((sub) =>
-                sub.id === subItemId ? { ...sub, ...updates } : sub
-              ),
+              subItems: (item.subItems || []).map((sub) => (sub.id === subItemId ? { ...sub, ...updates } : sub)),
             }
           : item
       ),
     });
   };
 
-  const deleteSubItem = (
-    category: 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses',
-    itemId: string,
-    subItemId: string
-  ) => {
+  const deleteSubItem = (category: BudgetCategory, itemId: string, subItemId: string) => {
     setData({
       ...data,
       [category]: data[category].map((item) =>
@@ -265,7 +262,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
     });
   };
 
-  const moveItem = (category: 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses', dragIndex: number, hoverIndex: number) => {
+  const moveItem = (category: BudgetCategory, dragIndex: number, hoverIndex: number) => {
     const items = [...data[category]];
     const draggedItem = items[dragIndex];
     items.splice(dragIndex, 1);
@@ -288,114 +285,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
   const totalIncomeSalary = data.salary + totalIncome;
   const remainingSalary = totalIncomeSalary - totalExpenses;
 
-  const renderItem = (
-    item: BudgetItem,
-    category: 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses',
-    index: number,
-    canDelete: boolean = true
-  ) => {
-    const isEditing = editingId === item.id;
-    const isExpanded = expandedItems.has(item.id);
-    const hasSubItems = category === 'fixedCosts' || category === 'income' || category === 'livingExpenses' || category === 'accountExpenses';
-    const itemTotal = calculateItemTotal(item);
-
-    return (
-      <DraggableItem
-        key={item.id}
-        item={item}
-        index={index}
-        category={category}
-        moveItem={(dragIndex, hoverIndex) => moveItem(category, dragIndex, hoverIndex)}
-        renderContent={() => (
-          <div className="mb-2">
-            <div className="flex items-center gap-2 py-2 border-b border-gray-200">
-              <GripVertical className="w-4 h-4 text-gray-400" />
-              {isEditing ? (
-                <>
-                  <Input
-                    value={editValue.name}
-                    onChange={(e) => setEditValue({ ...editValue, name: e.target.value })}
-                    className="flex-1"
-                  />
-                  {!hasSubItems && (
-                    <Input
-                      type="number"
-                      value={editValue.amount}
-                      onChange={(e) => setEditValue({ ...editValue, amount: Number(e.target.value) })}
-                      className="w-32"
-                    />
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => saveEdit(category)}>
-                    <Check className="w-4 h-4 text-green-600" />
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={cancelEdit}>
-                    <X className="w-4 h-4 text-red-600" />
-                  </Button>
-                </>
-              ) : (
-                <>
-                  {hasSubItems && (
-                    <Button size="sm" variant="ghost" onClick={() => toggleExpand(item.id)}>
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </Button>
-                  )}
-                  <span className="flex-1">{item.name}</span>
-                  <span className={`w-32 text-right font-semibold ${hasSubItems && (item.subItems?.length || 0) > 0 ? 'text-blue-600' : ''}`}>
-                    {itemTotal.toLocaleString()}원
-                  </span>
-                  {hasSubItems && item.subItems && item.subItems.length > 0 && (
-                    <span className="text-xs text-gray-500">({item.subItems.length}개)</span>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => startEdit(item)}>
-                    <Edit2 className="w-4 h-4" />
-                  </Button>
-                  {canDelete && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => deleteItem(category, item.id)}
-                    >
-                      <Trash2 className="w-4 h-4 text-red-600" />
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* 세부 항목 */}
-            {hasSubItems && isExpanded && (
-              <div className="ml-8 mt-2 p-3 bg-white rounded border">
-                <div className="space-y-2">
-                  {item.subItems && item.subItems.length > 0 && (
-                    <>
-                      <div className="flex gap-2 text-xs text-gray-600 font-semibold pb-2 border-b">
-                        <span className="flex-1">내용</span>
-                        <span className="w-32">금액</span>
-                        <span className="w-32">날짜</span>
-                        <span className="w-10"></span>
-                      </div>
-                      {item.subItems.map((subItem) => renderSubItem(subItem, item.id, category))}
-                    </>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => addSubItem(category, item.id)}
-                    className="w-full mt-2"
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    세부 항목 추가
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      />
-    );
-  };
-
-  const renderSubItem = (subItem: SubItem, itemId: string, category: 'fixedCosts' | 'income' | 'livingExpenses' | 'accountExpenses') => {
+  const renderSubItem = (subItem: SubItem, itemId: string, category: BudgetCategory) => {
     return (
       <div key={subItem.id} className="flex items-center gap-2">
         <Input
@@ -424,6 +314,87 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
     );
   };
 
+  const renderItem = (item: BudgetItem, category: BudgetCategory, index: number) => {
+    const isEditing = editingId === item.id;
+    const isExpanded = expandedItems.has(item.id);
+    const itemTotal = calculateItemTotal(item);
+
+    return (
+      <DraggableItem
+        key={item.id}
+        item={item}
+        index={index}
+        category={category}
+        moveItem={(dragIndex, hoverIndex) => moveItem(category, dragIndex, hoverIndex)}
+        renderContent={() => (
+          <div className="mb-2">
+            <div className="flex items-center gap-2 py-2 border-b border-gray-200">
+              <GripVertical className="w-4 h-4 text-gray-400" />
+
+              {isEditing ? (
+                <>
+                  <Input value={editValue.name} onChange={(e) => setEditValue({ ...editValue, name: e.target.value })} className="flex-1" />
+                  <Input
+                    type="number"
+                    value={editValue.amount}
+                    onChange={(e) => setEditValue({ ...editValue, amount: Number(e.target.value) })}
+                    className="w-32"
+                  />
+                  <Button size="sm" variant="ghost" onClick={() => saveEdit(category)}>
+                    <Check className="w-4 h-4 text-green-600" />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={cancelEdit}>
+                    <X className="w-4 h-4 text-red-600" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button size="sm" variant="ghost" onClick={() => toggleExpand(item.id)}>
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </Button>
+                  <span className="flex-1">{item.name}</span>
+                  <span className={`w-32 text-right font-semibold ${(item.subItems?.length || 0) > 0 ? 'text-blue-600' : ''}`}>
+                    {itemTotal.toLocaleString()}원
+                  </span>
+                  {item.subItems && item.subItems.length > 0 && <span className="text-xs text-gray-500">({item.subItems.length}개)</span>}
+                  <Button size="sm" variant="ghost" onClick={() => startEdit(item)}>
+                    <Edit2 className="w-4 h-4" />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => deleteItem(category, item.id)}>
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                  </Button>
+                </>
+              )}
+            </div>
+
+            {isExpanded && (
+              <div className="ml-8 mt-2 p-3 bg-white rounded border">
+                <div className="space-y-2">
+                  {item.subItems && item.subItems.length > 0 && (
+                    <>
+                      <div className="flex gap-2 text-xs text-gray-600 font-semibold pb-2 border-b">
+                        <span className="flex-1">내용</span>
+                        <span className="w-32">금액</span>
+                        <span className="w-32">날짜</span>
+                        <span className="w-10"></span>
+                      </div>
+                      {item.subItems.map((subItem) => renderSubItem(subItem, item.id, category))}
+                    </>
+                  )}
+
+                  <Button size="sm" variant="outline" onClick={() => addSubItem(category, item.id)} className="w-full mt-2">
+                    <Plus className="w-4 h-4 mr-1" />
+                    세부 항목 추가
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      />
+    );
+  };
+
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="space-y-4 p-4 md:p-6 max-w-4xl mx-auto">
@@ -434,11 +405,10 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           </div>
           <Button onClick={copyToAllMonths} variant="outline" className="gap-2">
             <Copy className="w-4 h-4" />
-            2월 → 전체 복제
+            1월 → 전체 복제
           </Button>
         </div>
 
-        {/* 월급 입력 */}
         <Card className="p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md">
           <div className="flex items-center justify-between">
             <h2 className="text-xl">월급</h2>
@@ -454,32 +424,6 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           </div>
         </Card>
 
-        {/* 소득 */}
-        <Card className="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200 shadow-md">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
-              <h2 className="text-xl text-emerald-900">추가 소득</h2>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-emerald-700">
-                {totalIncome.toLocaleString()}원
-              </div>
-              <Button onClick={() => addItem('income')} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                <Plus className="w-4 h-4 mr-1" />
-                추가
-              </Button>
-            </div>
-          </div>
-          <div>
-            {data.income.map((item, index) => renderItem(item, 'income', index))}
-            {data.income.length === 0 && (
-              <div className="text-center text-gray-500 py-4">항목을 추가해주세요</div>
-            )}
-          </div>
-        </Card>
-
-        {/* 고정비 */}
         <Card className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 shadow-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -487,21 +431,16 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
               <h2 className="text-xl text-orange-900">고정비</h2>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-orange-700">
-                {totalFixedCosts.toLocaleString()}원
-              </div>
+              <div className="text-lg font-semibold text-orange-700">{totalFixedCosts.toLocaleString()}원</div>
               <Button onClick={() => addItem('fixedCosts')} size="sm" className="bg-orange-600 hover:bg-orange-700">
                 <Plus className="w-4 h-4 mr-1" />
                 추가
               </Button>
             </div>
           </div>
-          <div>
-            {data.fixedCosts.map((item, index) => renderItem(item, 'fixedCosts', index, false))}
-          </div>
+          <div>{data.fixedCosts.map((item, index) => renderItem(item, 'fixedCosts', index))}</div>
         </Card>
 
-        {/* 생활비 */}
         <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 border-green-200 shadow-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -509,9 +448,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
               <h2 className="text-xl text-green-900">생활비 (카드)</h2>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-green-700">
-                {totalLivingExpenses.toLocaleString()}원
-              </div>
+              <div className="text-lg font-semibold text-green-700">{totalLivingExpenses.toLocaleString()}원</div>
               <Button onClick={() => addItem('livingExpenses')} size="sm" className="bg-green-600 hover:bg-green-700">
                 <Plus className="w-4 h-4 mr-1" />
                 추가
@@ -520,13 +457,10 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           </div>
           <div>
             {data.livingExpenses.map((item, index) => renderItem(item, 'livingExpenses', index))}
-            {data.livingExpenses.length === 0 && (
-              <div className="text-center text-gray-500 py-4">항목을 추가해주세요</div>
-            )}
+            {data.livingExpenses.length === 0 && <div className="text-center text-gray-500 py-4">항목을 추가해주세요</div>}
           </div>
         </Card>
 
-        {/* 계좌 지출비 */}
         <Card className="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200 shadow-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -534,9 +468,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
               <h2 className="text-xl text-indigo-900">계좌 지출비</h2>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-indigo-700">
-                {totalAccountExpenses.toLocaleString()}원
-              </div>
+              <div className="text-lg font-semibold text-indigo-700">{totalAccountExpenses.toLocaleString()}원</div>
               <Button onClick={() => addItem('accountExpenses')} size="sm" className="bg-indigo-600 hover:bg-indigo-700">
                 <Plus className="w-4 h-4 mr-1" />
                 추가
@@ -545,13 +477,31 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           </div>
           <div>
             {data.accountExpenses.map((item, index) => renderItem(item, 'accountExpenses', index))}
-            {data.accountExpenses.length === 0 && (
-              <div className="text-center text-gray-500 py-4">항목을 추가해주세요</div>
-            )}
+            {data.accountExpenses.length === 0 && <div className="text-center text-gray-500 py-4">항목을 추가해주세요</div>}
           </div>
         </Card>
 
-        {/* 요약 */}
+        {/* ✅ 추가 소득: 계좌 지출비 하단 */}
+        <Card className="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200 shadow-md">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-emerald-600" />
+              <h2 className="text-xl text-emerald-900">추가 소득</h2>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-lg font-semibold text-emerald-700">{totalIncome.toLocaleString()}원</div>
+              <Button onClick={() => addItem('income')} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                <Plus className="w-4 h-4 mr-1" />
+                추가
+              </Button>
+            </div>
+          </div>
+          <div>
+            {data.income.map((item, index) => renderItem(item, 'income', index))}
+            {data.income.length === 0 && <div className="text-center text-gray-500 py-4">항목을 추가해주세요</div>}
+          </div>
+        </Card>
+
         <Card className="p-6 bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-xl">
           <h2 className="text-2xl mb-4">월별 요약</h2>
           <div className="grid grid-cols-2 gap-4 text-lg">

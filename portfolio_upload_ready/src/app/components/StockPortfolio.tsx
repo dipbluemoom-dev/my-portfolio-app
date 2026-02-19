@@ -1,32 +1,48 @@
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp, TrendingUp, DollarSign, PieChart as PieChartIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Trash2, TrendingUp, ChevronDown, ChevronUp, RotateCcw, Save } from 'lucide-react';
+import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Card } from './ui/card';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  Legend,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
-interface Purchase {
+type Currency = 'USD' | 'KRW';
+
+interface PurchaseRecord {
   id: string;
   quantity: number;
   price: number;
 }
 
-interface Sale {
+interface SaleRecord {
   id: string;
-  month: number; // 1-12
   quantity: number;
   price: number;
-  date: string;
+  date: string; // YYYY-MM-DD
 }
 
 interface Stock {
   id: string;
   ticker: string;
+  quantity: number;
+  avgPrice: number;
   currentPrice: number;
   targetPrice: number;
-  purchases: Purchase[];
-  sales: Sale[];
-  currency: 'KRW' | 'USD';
+  currency: Currency;
+  purchases?: PurchaseRecord[];
+  sales?: SaleRecord[];
+  isExpanded?: boolean;
 }
 
 interface Account {
@@ -35,838 +51,754 @@ interface Account {
   stocks: Stock[];
 }
 
-interface StockData {
+interface StockPortfolioData {
+  exchangeRate: number;
   accounts: Account[];
-  exchangeRate: number; // USD to KRW
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF6B9D'];
+interface StockMetrics {
+  totalBuyCost: number;
+  totalBuyCostKRW: number;
+  currentValue: number;
+  currentValueKRW: number;
+  profitLoss: number;
+  profitLossKRW: number;
+  profitLossPercent: number;
+  targetValue: number;
+  targetValueKRW: number;
+  targetProfitLoss: number;
+  targetProfitLossKRW: number;
+  targetProfitLossPercent: number;
+}
+
+const COLORS = [
+  '#60A5FA',
+  '#34D399',
+  '#FBBF24',
+  '#F87171',
+  '#A78BFA',
+  '#FB7185',
+  '#22D3EE',
+  '#F97316',
+  '#10B981',
+  '#6366F1',
+];
+
+const STORAGE_KEY = 'stockPortfolio';
+const EXCHANGE_RATE_KEY = 'stockExchangeRate';
+
+const fmt2 = (n: number) =>
+  (Number.isFinite(n) ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00');
+const fmtPct2 = (n: number) => `${Number.isFinite(n) ? n.toFixed(2) : '0.00'}%`;
 
 export function StockPortfolio() {
-  const [data, setData] = useState<StockData>(() => {
-    const saved = localStorage.getItem('stockPortfolio');
+  const [data, setData] = useState<StockPortfolioData>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const savedExchangeRate = localStorage.getItem(EXCHANGE_RATE_KEY);
+    const exchangeRate = savedExchangeRate ? Number(savedExchangeRate) : 1300;
+
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return {
+        exchangeRate,
+        accounts: parsed.accounts || [],
+      };
     }
+
     return {
+      exchangeRate,
       accounts: [
-        { id: '1', name: '계좌 1번', stocks: [] },
-        { id: '2', name: '계좌 2번', stocks: [] },
+        { id: '1', name: '계좌 1', stocks: [] },
+        { id: '2', name: '계좌 2', stocks: [] },
       ],
-      exchangeRate: 1100, // Example exchange rate
     };
   });
 
-  const [expandedStocks, setExpandedStocks] = useState<Set<string>>(new Set());
-  const [editingStock, setEditingStock] = useState<string | null>(null);
-  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
-  const [editingAccountName, setEditingAccountName] = useState('');
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ accounts: data.accounts }));
+  }, [data.accounts]);
 
   useEffect(() => {
-    localStorage.setItem('stockPortfolio', JSON.stringify(data));
-  }, [data]);
-
-  // 다른 화면(주식 대기표 등)에서도 같은 환율을 쓰기 위해 별도 키로도 저장
-  useEffect(() => {
-    localStorage.setItem('stockExchangeRate', String(data.exchangeRate ?? 0));
-    window.dispatchEvent(new CustomEvent('stockExchangeRateChanged', { detail: data.exchangeRate }));
+    localStorage.setItem(EXCHANGE_RATE_KEY, String(data.exchangeRate));
+    // 다른 컴포넌트(대기표 등)에도 동일 환율을 적용하기 위해 이벤트 발사
+    window.dispatchEvent(new Event('stockExchangeRateChanged'));
   }, [data.exchangeRate]);
 
+  const toKRW = (amount: number, currency: Currency) => (currency === 'USD' ? amount * data.exchangeRate : amount);
+
+  const calculateStockMetrics = (stock: Stock): StockMetrics => {
+    const totalBuyCost = stock.quantity * stock.avgPrice;
+    const currentValue = stock.quantity * stock.currentPrice;
+    const profitLoss = currentValue - totalBuyCost;
+    const profitLossPercent = totalBuyCost > 0 ? (profitLoss / totalBuyCost) * 100 : 0;
+
+    const targetValue = stock.quantity * stock.targetPrice;
+    const targetProfitLoss = targetValue - totalBuyCost;
+    const targetProfitLossPercent = totalBuyCost > 0 ? (targetProfitLoss / totalBuyCost) * 100 : 0;
+
+    return {
+      totalBuyCost,
+      totalBuyCostKRW: toKRW(totalBuyCost, stock.currency),
+      currentValue,
+      currentValueKRW: toKRW(currentValue, stock.currency),
+      profitLoss,
+      profitLossKRW: toKRW(profitLoss, stock.currency),
+      profitLossPercent,
+      targetValue,
+      targetValueKRW: toKRW(targetValue, stock.currency),
+      targetProfitLoss,
+      targetProfitLossKRW: toKRW(targetProfitLoss, stock.currency),
+      targetProfitLossPercent,
+    };
+  };
+
+  const calculateAccountMetrics = (account: Account) => {
+    const stocksWithMetrics = account.stocks.map((stock) => ({ stock, metrics: calculateStockMetrics(stock) }));
+    const totals = stocksWithMetrics.reduce(
+      (acc, { metrics }) => {
+        acc.totalBuyCostKRW += metrics.totalBuyCostKRW;
+        acc.currentValueKRW += metrics.currentValueKRW;
+        acc.profitLossKRW += metrics.profitLossKRW;
+        return acc;
+      },
+      { totalBuyCostKRW: 0, currentValueKRW: 0, profitLossKRW: 0 }
+    );
+
+    const profitLossPercent = totals.totalBuyCostKRW > 0 ? (totals.profitLossKRW / totals.totalBuyCostKRW) * 100 : 0;
+    return { ...totals, profitLossPercent, stocksWithMetrics };
+  };
+
+  const totalMetrics = useMemo(() => {
+    const totals = data.accounts.reduce(
+      (acc, account) => {
+        const m = calculateAccountMetrics(account);
+        acc.totalBuyCostKRW += m.totalBuyCostKRW;
+        acc.currentValueKRW += m.currentValueKRW;
+        acc.profitLossKRW += m.profitLossKRW;
+        return acc;
+      },
+      { totalBuyCostKRW: 0, currentValueKRW: 0, profitLossKRW: 0 }
+    );
+    const profitLossPercent = totals.totalBuyCostKRW > 0 ? (totals.profitLossKRW / totals.totalBuyCostKRW) * 100 : 0;
+    return { ...totals, profitLossPercent };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.accounts, data.exchangeRate]);
+
   const updateAccountName = (accountId: string, name: string) => {
-    setData({
-      ...data,
-      accounts: data.accounts.map((acc) =>
-        acc.id === accountId ? { ...acc, name } : acc
-      ),
-    });
+    setData((prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((acc) => (acc.id === accountId ? { ...acc, name } : acc)),
+    }));
   };
 
   const addStock = (accountId: string) => {
     const newStock: Stock = {
       id: Date.now().toString(),
-      ticker: '티커명',
+      ticker: '',
+      quantity: 0,
+      avgPrice: 0,
       currentPrice: 0,
       targetPrice: 0,
+      currency: 'USD',
       purchases: [],
       sales: [],
-      currency: 'USD',
+      isExpanded: true,
     };
-    setData({
-      ...data,
-      accounts: data.accounts.map((acc) =>
-        acc.id === accountId ? { ...acc, stocks: [...acc.stocks, newStock] } : acc
-      ),
-    });
-  };
-
-  const deleteStock = (accountId: string, stockId: string) => {
-    setData({
-      ...data,
-      accounts: data.accounts.map((acc) =>
-        acc.id === accountId
-          ? { ...acc, stocks: acc.stocks.filter((s) => s.id !== stockId) }
-          : acc
-      ),
-    });
+    setData((prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((acc) => (acc.id === accountId ? { ...acc, stocks: [...acc.stocks, newStock] } : acc)),
+    }));
   };
 
   const updateStock = (accountId: string, stockId: string, updates: Partial<Stock>) => {
-    setData({
-      ...data,
-      accounts: data.accounts.map((acc) =>
+    setData((prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((acc) =>
         acc.id === accountId
           ? {
               ...acc,
-              stocks: acc.stocks.map((s) => (s.id === stockId ? { ...s, ...updates } : s)),
+              stocks: acc.stocks.map((stock) => (stock.id === stockId ? { ...stock, ...updates } : stock)),
             }
           : acc
       ),
-    });
+    }));
   };
 
-  const addPurchase = (accountId: string, stockId: string) => {
-    const newPurchase: Purchase = {
-      id: Date.now().toString(),
-      quantity: 0,
-      price: 0,
-    };
-    setData({
-      ...data,
-      accounts: data.accounts.map((acc) =>
-        acc.id === accountId
-          ? {
-              ...acc,
-              stocks: acc.stocks.map((s) =>
-                s.id === stockId ? { ...s, purchases: [...s.purchases, newPurchase] } : s
-              ),
-            }
-          : acc
+  const deleteStock = (accountId: string, stockId: string) => {
+    if (!confirm('이 종목을 삭제할까요?')) return;
+    setData((prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((acc) =>
+        acc.id === accountId ? { ...acc, stocks: acc.stocks.filter((s) => s.id !== stockId) } : acc
       ),
-    });
+    }));
   };
 
-  const updatePurchase = (
+  const toggleStockExpand = (accountId: string, stockId: string) => {
+    const account = data.accounts.find((a) => a.id === accountId);
+    const stock = account?.stocks.find((s) => s.id === stockId);
+    updateStock(accountId, stockId, { isExpanded: !stock?.isExpanded });
+  };
+
+  const addPurchaseRecord = (accountId: string, stockId: string) => {
+    const account = data.accounts.find((a) => a.id === accountId);
+    const stock = account?.stocks.find((s) => s.id === stockId);
+    const purchases = stock?.purchases || [];
+    const newRecord: PurchaseRecord = { id: Date.now().toString(), quantity: 0, price: 0 };
+    updateStock(accountId, stockId, { purchases: [...purchases, newRecord] });
+  };
+
+  const updatePurchaseRecord = (
     accountId: string,
     stockId: string,
-    purchaseId: string,
-    updates: Partial<Purchase>
+    recordId: string,
+    updates: Partial<PurchaseRecord>
   ) => {
-    setData({
-      ...data,
-      accounts: data.accounts.map((acc) =>
-        acc.id === accountId
-          ? {
-              ...acc,
-              stocks: acc.stocks.map((s) =>
-                s.id === stockId
-                  ? {
-                      ...s,
-                      purchases: s.purchases.map((p) =>
-                        p.id === purchaseId ? { ...p, ...updates } : p
-                      ),
-                    }
-                  : s
-              ),
-            }
-          : acc
-      ),
+    const account = data.accounts.find((a) => a.id === accountId);
+    const stock = account?.stocks.find((s) => s.id === stockId);
+    const purchases = stock?.purchases || [];
+    updateStock(accountId, stockId, {
+      purchases: purchases.map((r) => (r.id === recordId ? { ...r, ...updates } : r)),
     });
   };
 
-  const deletePurchase = (accountId: string, stockId: string, purchaseId: string) => {
-    setData({
-      ...data,
-      accounts: data.accounts.map((acc) =>
-        acc.id === accountId
-          ? {
-              ...acc,
-              stocks: acc.stocks.map((s) =>
-                s.id === stockId
-                  ? { ...s, purchases: s.purchases.filter((p) => p.id !== purchaseId) }
-                  : s
-              ),
-            }
-          : acc
-      ),
-    });
+  const deletePurchaseRecord = (accountId: string, stockId: string, recordId: string) => {
+    const account = data.accounts.find((a) => a.id === accountId);
+    const stock = account?.stocks.find((s) => s.id === stockId);
+    const purchases = stock?.purchases || [];
+    updateStock(accountId, stockId, { purchases: purchases.filter((r) => r.id !== recordId) });
   };
 
-  const addSale = (accountId: string, stockId: string) => {
-    const newSale: Sale = {
-      id: Date.now().toString(),
-      month: new Date().getMonth() + 1, // Current month
-      quantity: 0,
-      price: 0,
-      date: new Date().toISOString().split('T')[0], // Current date
-    };
-    setData({
-      ...data,
-      accounts: data.accounts.map((acc) =>
-        acc.id === accountId
-          ? {
-              ...acc,
-              stocks: acc.stocks.map((s) =>
-                s.id === stockId ? { ...s, sales: [...s.sales, newSale] } : s
-              ),
-            }
-          : acc
-      ),
-    });
+  const applyPurchaseRecords = (accountId: string, stockId: string) => {
+    const account = data.accounts.find((a) => a.id === accountId);
+    const stock = account?.stocks.find((s) => s.id === stockId);
+    if (!stock) return;
+
+    const purchases = stock.purchases || [];
+    const totalQty = purchases.reduce((sum, r) => sum + (r.quantity || 0), 0);
+    const totalCost = purchases.reduce((sum, r) => sum + (r.quantity || 0) * (r.price || 0), 0);
+
+    const avgPrice = totalQty > 0 ? totalCost / totalQty : 0;
+    updateStock(accountId, stockId, { quantity: totalQty, avgPrice });
   };
 
-  const updateSale = (
-    accountId: string,
-    stockId: string,
-    saleId: string,
-    updates: Partial<Sale>
-  ) => {
-    setData({
-      ...data,
-      accounts: data.accounts.map((acc) =>
-        acc.id === accountId
-          ? {
-              ...acc,
-              stocks: acc.stocks.map((s) =>
-                s.id === stockId
-                  ? {
-                      ...s,
-                      sales: s.sales.map((sa) =>
-                        sa.id === saleId ? { ...sa, ...updates } : sa
-                      ),
-                    }
-                  : s
-              ),
-            }
-          : acc
-      ),
-    });
+  const addSaleRecord = (accountId: string, stockId: string) => {
+    const account = data.accounts.find((a) => a.id === accountId);
+    const stock = account?.stocks.find((s) => s.id === stockId);
+    const sales = stock?.sales || [];
+    const today = new Date().toISOString().slice(0, 10);
+    const newRecord: SaleRecord = { id: Date.now().toString(), quantity: 0, price: 0, date: today };
+    updateStock(accountId, stockId, { sales: [...sales, newRecord] });
   };
 
-  const deleteSale = (accountId: string, stockId: string, saleId: string) => {
-    setData({
-      ...data,
-      accounts: data.accounts.map((acc) =>
-        acc.id === accountId
-          ? {
-              ...acc,
-              stocks: acc.stocks.map((s) =>
-                s.id === stockId
-                  ? { ...s, sales: s.sales.filter((sa) => sa.id !== saleId) }
-                  : s
-              ),
-            }
-          : acc
-      ),
-    });
+  const updateSaleRecord = (accountId: string, stockId: string, recordId: string, updates: Partial<SaleRecord>) => {
+    const account = data.accounts.find((a) => a.id === accountId);
+    const stock = account?.stocks.find((s) => s.id === stockId);
+    const sales = stock?.sales || [];
+    updateStock(accountId, stockId, { sales: sales.map((r) => (r.id === recordId ? { ...r, ...updates } : r)) });
   };
 
-  const toggleExpand = (stockId: string) => {
-    const newExpanded = new Set(expandedStocks);
-    if (newExpanded.has(stockId)) {
-      newExpanded.delete(stockId);
-    } else {
-      newExpanded.add(stockId);
-    }
-    setExpandedStocks(newExpanded);
+  const deleteSaleRecord = (accountId: string, stockId: string, recordId: string) => {
+    const account = data.accounts.find((a) => a.id === accountId);
+    const stock = account?.stocks.find((s) => s.id === stockId);
+    const sales = stock?.sales || [];
+    updateStock(accountId, stockId, { sales: sales.filter((r) => r.id !== recordId) });
   };
 
-  const toKRW = (amount: number, currency: 'KRW' | 'USD') => {
-    return currency === 'USD' ? amount * data.exchangeRate : amount;
-  };
+  const calculateMonthlySales = (account: Account) => {
+    const monthly: Record<string, number> = {};
+    const monthlyQty: Record<string, number> = {};
 
-  const calculateStockMetrics = (stock: Stock) => {
-    // ✅ 매수 기록(분할매수) 합계
-    const totalBuyQuantity = stock.purchases.reduce((sum, p) => sum + p.quantity, 0);
-    const totalBuyCost = stock.purchases.reduce((sum, p) => sum + p.quantity * p.price, 0);
-
-    // ✅ 매도 기록 합계
-    const soldQuantity = stock.sales.reduce((sum, s) => sum + s.quantity, 0);
-    const totalSellProceeds = stock.sales.reduce((sum, s) => sum + s.quantity * s.price, 0);
-
-    // 평균 매입단가(간단 평균법)
-    const avgPrice = totalBuyQuantity > 0 ? totalBuyCost / totalBuyQuantity : 0;
-
-    // 현재 보유 수량
-    const currentQuantity = totalBuyQuantity - soldQuantity;
-
-    // 평가금액(보유수량 * 현재가)
-    const currentValue = Math.max(0, currentQuantity) * stock.currentPrice;
-
-    // ✅ 손익은 "총 매수금액" 기준으로 계산(사용자가 매수기록에 입력한 합계와 맞춰서 보여주기)
-    //   - 매도를 많이 섞어 계산하면 복잡해져서, 여기서는 단순히 "평가금액 - 총 매수금액"으로 통일
-    const profitLoss = currentValue - totalBuyCost;
-    const profitLossRate = totalBuyCost > 0 ? (profitLoss / totalBuyCost) * 100 : 0;
-
-    // 목표가 기준 기대수익률(평단 → 목표가)
-    const targetProfitRate = avgPrice > 0 ? ((stock.targetPrice - avgPrice) / avgPrice) * 100 : 0;
-
-    // 원화 환산 값
-    const totalBuyCostKRW = toKRW(totalBuyCost, stock.currency);
-    const currentValueKRW = toKRW(currentValue, stock.currency);
-    const profitLossKRW = currentValueKRW - totalBuyCostKRW;
-    const totalSellProceedsKRW = toKRW(totalSellProceeds, stock.currency);
-
-    return {
-      totalBuyQuantity,
-      soldQuantity,
-      currentQuantity,
-      totalBuyCost,
-      totalBuyCostKRW,
-      avgPrice,
-      currentValue,
-      currentValueKRW,
-      profitLoss,
-      profitLossKRW,
-      profitLossRate,
-      targetProfitRate,
-      totalSellProceeds,
-      totalSellProceedsKRW,
-    };
-  };
-
-  const calculateAccountMetrics = (account: Account) => {
-    const stocks = account.stocks.map((stock) => ({
-      stock,
-      metrics: calculateStockMetrics(stock),
-    }));
-
-    const totalCost = stocks.reduce((sum, { metrics }) => sum + metrics.totalBuyCostKRW, 0);
-    const totalValue = stocks.reduce((sum, { metrics }) => sum + metrics.currentValueKRW, 0);
-    const totalProfitLoss = totalValue - totalCost;
-    const totalProfitLossRate = totalCost > 0 ? (totalProfitLoss / totalCost) * 100 : 0;
-
-    return {
-      stocks,
-      totalCost,
-      totalValue,
-      totalProfitLoss,
-      totalProfitLossRate,
-    };
-  };
-
-  // 계좌별 월별 매도 금액 계산
-  const calculateMonthlySales = (accountId: string) => {
-    const account = data.accounts.find((acc) => acc.id === accountId);
-    if (!account) return [];
-
-    const monthlySales: Record<number, number> = {};
-    for (let month = 1; month <= 12; month++) {
-      monthlySales[month] = 0;
+    for (const stock of account.stocks) {
+      const sales = stock.sales || [];
+      for (const sale of sales) {
+        if (!sale.date) continue;
+        const monthKey = sale.date.slice(0, 7); // YYYY-MM
+        const amount = (sale.quantity || 0) * (sale.price || 0);
+        const amountKRW = toKRW(amount, stock.currency);
+        monthly[monthKey] = (monthly[monthKey] || 0) + amountKRW;
+        monthlyQty[monthKey] = (monthlyQty[monthKey] || 0) + (sale.quantity || 0);
+      }
     }
 
-    account.stocks.forEach((stock) => {
-      stock.sales.forEach((sale) => {
-        const saleAmount = sale.quantity * sale.price;
-        const saleAmountKRW = toKRW(saleAmount, stock.currency);
-        monthlySales[sale.month] += saleAmountKRW;
-      });
-    });
-
-    return Object.entries(monthlySales).map(([month, amount]) => ({
-      month: `${month}월`,
-      매도금액: amount,
-    }));
+    const keys = Object.keys(monthly).sort();
+    return keys.map((k) => ({ month: k, salesKRW: monthly[k], quantity: monthlyQty[k] }));
   };
-
-  const allStocks = data.accounts.flatMap((acc) =>
-    acc.stocks.map((stock) => ({
-      accountId: acc.id,
-      accountName: acc.name,
-      stock,
-      metrics: calculateStockMetrics(stock),
-    }))
-  );
-
-  const totalInvestment = allStocks.reduce((sum, { metrics }) => sum + metrics.totalBuyCostKRW, 0);
-  const totalCurrentValue = allStocks.reduce((sum, { metrics }) => sum + metrics.currentValueKRW, 0);
-  const totalProfitLoss = totalCurrentValue - totalInvestment;
-  const totalProfitLossRate = totalInvestment > 0 ? (totalProfitLoss / totalInvestment) * 100 : 0;
-
-  const pieData = allStocks
-    .filter(({ metrics }) => metrics.totalBuyCostKRW > 0)
-    .map(({ stock, metrics }) => ({
-      name: stock.ticker,
-      value: metrics.totalBuyCostKRW,
-      percentage: totalInvestment > 0 ? (metrics.totalBuyCostKRW / totalInvestment) * 100 : 0,
-    }));
 
   const renderStock = (accountId: string, stock: Stock) => {
     const metrics = calculateStockMetrics(stock);
-    const isExpanded = expandedStocks.has(stock.id);
+    const purchases = stock.purchases || [];
+    const sales = stock.sales || [];
 
-    const showKRWSub = stock.currency === 'USD' && data.exchangeRate > 0;
-    const unit = stock.currency === 'USD' ? '$' : '원';
+    const purchaseTotal = purchases.reduce((sum, r) => sum + (r.quantity || 0) * (r.price || 0), 0);
+    const purchaseTotalKRW = toKRW(purchaseTotal, stock.currency);
+    const saleTotal = sales.reduce((sum, r) => sum + (r.quantity || 0) * (r.price || 0), 0);
+    const saleTotalKRW = toKRW(saleTotal, stock.currency);
 
     return (
-      <div key={stock.id} className="border rounded-xl p-4 mb-4 bg-white shadow-sm">
-        <div className="flex items-center gap-2 mb-2">
-          <Input
-            value={stock.ticker}
-            onChange={(e) => updateStock(accountId, stock.id, { ticker: e.target.value })}
-            className="w-32"
-            placeholder="티커"
-          />
-          <select
-            value={stock.currency}
-            onChange={(e) =>
-              updateStock(accountId, stock.id, { currency: e.target.value as 'KRW' | 'USD' })
-            }
-            className="px-3 py-2 border rounded"
-          >
-            <option value="KRW">₩</option>
-            <option value="USD">$</option>
-          </select>
-          <Input
-            type="number"
-            value={stock.currentPrice}
-            onChange={(e) => updateStock(accountId, stock.id, { currentPrice: Number(e.target.value) })}
-            className="w-32"
-            placeholder="현재가"
-          />
-          <Input
-            type="number"
-            value={stock.targetPrice}
-            onChange={(e) => updateStock(accountId, stock.id, { targetPrice: Number(e.target.value) })}
-            className="w-32"
-            placeholder="목표가"
-          />
-          <Button size="sm" variant="ghost" onClick={() => toggleExpand(stock.id)}>
-            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => deleteStock(accountId, stock.id)}>
-            <Trash2 className="w-4 h-4 text-red-600" />
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-2">
-          <div>
-            <div className="text-gray-500">총 구매가(매수합)</div>
-            <div className="font-semibold">{metrics.totalBuyCost.toLocaleString()}{unit}</div>
-            {showKRWSub && <div className="text-xs text-gray-400">≈ {metrics.totalBuyCostKRW.toLocaleString()}원</div>}
-          </div>
-
-          <div>
-            <div className="text-gray-500">평단가</div>
-            <div className="font-semibold">{metrics.avgPrice.toFixed(4)}{unit}</div>
-          </div>
-
-          <div>
-            <div className="text-gray-500">보유 수량</div>
-            <div className="font-semibold">{Math.max(0, metrics.currentQuantity).toLocaleString()}주</div>
-          </div>
-
-          <div>
-            <div className="text-gray-500">평가금액</div>
-            <div className="font-semibold">{metrics.currentValue.toLocaleString()}{unit}</div>
-            <div className="text-xs text-gray-500">{metrics.currentValueKRW.toLocaleString()}원</div>
-          </div>
-
-          <div>
-            <div className="text-gray-500">손익</div>
-            <div className={metrics.profitLoss >= 0 ? 'font-semibold text-green-600' : 'font-semibold text-red-600'}>
-              {metrics.profitLoss.toLocaleString()}{unit} ({metrics.profitLossRate.toFixed(2)}%)
+      <Card key={stock.id} className="p-4 bg-white shadow-sm border">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-1">
+            <Input
+              value={stock.ticker}
+              onChange={(e) => updateStock(accountId, stock.id, { ticker: e.target.value.toUpperCase() })}
+              className="w-28 font-bold"
+              placeholder="티커"
+            />
+            <select
+              value={stock.currency}
+              onChange={(e) => updateStock(accountId, stock.id, { currency: e.target.value as Currency })}
+              className="border rounded px-2 py-1"
+            >
+              <option value="USD">USD</option>
+              <option value="KRW">KRW</option>
+            </select>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">현재가</span>
+              <Input
+                type="number"
+                value={stock.currentPrice}
+                onChange={(e) => updateStock(accountId, stock.id, { currentPrice: Number(e.target.value) })}
+                className="w-24"
+              />
             </div>
-            <div className={metrics.profitLossKRW >= 0 ? 'text-xs text-green-600' : 'text-xs text-red-600'}>
-              {metrics.profitLossKRW.toLocaleString()}원
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">목표가</span>
+              <Input
+                type="number"
+                value={stock.targetPrice}
+                onChange={(e) => updateStock(accountId, stock.id, { targetPrice: Number(e.target.value) })}
+                className="w-24"
+              />
             </div>
           </div>
 
-          <div>
-            <div className="text-gray-500">목표가 이익률</div>
-            <div className={metrics.targetProfitRate >= 0 ? 'font-semibold text-green-600' : 'font-semibold text-red-600'}>
-              {metrics.targetProfitRate.toFixed(2)}%
-            </div>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => toggleStockExpand(accountId, stock.id)}>
+              {stock.isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => deleteStock(accountId, stock.id)}>
+              <Trash2 className="w-4 h-4 text-red-600" />
+            </Button>
           </div>
         </div>
 
-        {isExpanded && (
-          <div className="mt-4 border-t pt-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4>매수기록</h4>
-              <Button size="sm" onClick={() => addPurchase(accountId, stock.id)}>
-                <Plus className="w-4 h-4 mr-1" />
-                추가
-              </Button>
+        {/* 핵심 요약 */}
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+          <div className="bg-gray-50 rounded p-2">
+            <div className="text-gray-600">보유 수량</div>
+            <div className="font-semibold">{fmt2(stock.quantity)}주</div>
+          </div>
+          <div className="bg-gray-50 rounded p-2">
+            <div className="text-gray-600">평단가</div>
+            <div className="font-semibold">
+              {fmt2(stock.avgPrice)} {stock.currency}
             </div>
-            {stock.purchases.map((purchase) => (
-              <div key={purchase.id} className="flex items-center gap-2 mb-2">
-                <Input
-                  type="number"
-                  value={purchase.quantity}
-                  onChange={(e) =>
-                    updatePurchase(accountId, stock.id, purchase.id, {
-                      quantity: Number(e.target.value),
-                    })
-                  }
-                  className="w-24"
-                  placeholder="수량"
-                />
-                <span>주</span>
-                <Input
-                  type="number"
-                  value={purchase.price}
-                  onChange={(e) =>
-                    updatePurchase(accountId, stock.id, purchase.id, {
-                      price: Number(e.target.value),
-                    })
-                  }
-                  className="w-32"
-                  placeholder="단가"
-                />
-                <span>{stock.currency === 'USD' ? '$' : '원'}</span>
-                <span className="text-sm text-gray-600">
-                  합계: {(purchase.quantity * purchase.price).toLocaleString()}{stock.currency === 'USD' ? '$' : '원'}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => deletePurchase(accountId, stock.id, purchase.id)}
-                >
-                  <Trash2 className="w-4 h-4 text-red-600" />
-                </Button>
+          </div>
+          <div className="bg-gray-50 rounded p-2">
+            <div className="text-gray-600">평가금액</div>
+            <div className="font-semibold">
+              {fmt2(metrics.currentValue)} {stock.currency}
+            </div>
+            <div className="text-xs text-gray-500">{fmt2(metrics.currentValueKRW)}원</div>
+          </div>
+          <div className="bg-gray-50 rounded p-2">
+            <div className="text-gray-600">손익</div>
+            <div className={`font-semibold ${metrics.profitLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {metrics.profitLoss >= 0 ? '+' : ''}{fmt2(metrics.profitLoss)} {stock.currency}
+            </div>
+            <div className={`text-xs ${metrics.profitLossKRW >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {metrics.profitLossKRW >= 0 ? '+' : ''}{fmt2(metrics.profitLossKRW)}원
+            </div>
+            <div className={`text-xs ${metrics.profitLossPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {metrics.profitLossPercent >= 0 ? '+' : ''}{fmtPct2(metrics.profitLossPercent)}
+            </div>
+          </div>
+          <div className="bg-gray-50 rounded p-2">
+            <div className="text-gray-600">목표가 이익률</div>
+            <div className={`font-semibold ${metrics.targetProfitLossPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {metrics.targetProfitLossPercent >= 0 ? '+' : ''}{fmtPct2(metrics.targetProfitLossPercent)}
+            </div>
+          </div>
+        </div>
+
+        {stock.isExpanded && (
+          <div className="mt-4 space-y-4">
+            {/* 매수 기록 */}
+            <div className="p-3 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold text-blue-800">매수 기록</h4>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => addPurchaseRecord(accountId, stock.id)}>
+                    <Plus className="w-4 h-4 mr-1" />
+                    추가
+                  </Button>
+                  <Button size="sm" onClick={() => applyPurchaseRecords(accountId, stock.id)} className="bg-blue-600 hover:bg-blue-700">
+                    <Save className="w-4 h-4 mr-1" />
+                    적용
+                  </Button>
+                </div>
               </div>
-            ))}
 
-            <div className="flex items-center justify-between mb-2 mt-4">
-              <h4>매도기록</h4>
-              <Button size="sm" onClick={() => addSale(accountId, stock.id)}>
-                <Plus className="w-4 h-4 mr-1" />
-                추가
-              </Button>
-            </div>
-            {stock.sales.map((sale) => (
-              <div key={sale.id} className="flex items-center gap-2 mb-2">
-                <select
-                  value={sale.month}
-                  onChange={(e) =>
-                    updateSale(accountId, stock.id, sale.id, {
-                      month: Number(e.target.value),
-                    })
-                  }
-                  className="px-3 py-2 border rounded w-24"
-                >
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                    <option key={month} value={month}>
-                      {month}월
-                    </option>
+              {purchases.length > 0 ? (
+                <div className="space-y-2">
+                  {purchases.map((record) => (
+                    <div key={record.id} className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={record.quantity}
+                        onChange={(e) => updatePurchaseRecord(accountId, stock.id, record.id, { quantity: Number(e.target.value) })}
+                        className="w-24"
+                        placeholder="수량"
+                      />
+                      <Input
+                        type="number"
+                        value={record.price}
+                        onChange={(e) => updatePurchaseRecord(accountId, stock.id, record.id, { price: Number(e.target.value) })}
+                        className="w-24"
+                        placeholder="가격"
+                      />
+                      <span className="text-sm text-gray-600">=</span>
+                      <span className="text-sm font-medium">{fmt2((record.quantity || 0) * (record.price || 0))} {stock.currency}</span>
+                      <Button size="sm" variant="ghost" onClick={() => deletePurchaseRecord(accountId, stock.id, record.id)}>
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </Button>
+                    </div>
                   ))}
-                </select>
-                <Input
-                  type="number"
-                  value={sale.quantity}
-                  onChange={(e) =>
-                    updateSale(accountId, stock.id, sale.id, {
-                      quantity: Number(e.target.value),
-                    })
-                  }
-                  className="w-24"
-                  placeholder="수량"
-                />
-                <span>주</span>
-                <Input
-                  type="number"
-                  value={sale.price}
-                  onChange={(e) =>
-                    updateSale(accountId, stock.id, sale.id, {
-                      price: Number(e.target.value),
-                    })
-                  }
-                  className="w-32"
-                  placeholder="단가"
-                />
-                <span>{stock.currency === 'USD' ? '$' : '원'}</span>
-                <span className="text-sm text-gray-600">
-                  합계: {(sale.quantity * sale.price).toLocaleString()}{stock.currency === 'USD' ? '$' : '원'}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => deleteSale(accountId, stock.id, sale.id)}
-                >
-                  <Trash2 className="w-4 h-4 text-red-600" />
+                  <div className="pt-2 border-t border-blue-200">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-semibold">매수 합계</span>
+                      <div className="text-right">
+                        <div className="font-semibold">{fmt2(purchaseTotal)} {stock.currency}</div>
+                        <div className="text-xs text-gray-600">{fmt2(purchaseTotalKRW)}원</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-2">매수 기록이 없습니다.</div>
+              )}
+            </div>
+
+            {/* 매도 기록 */}
+            <div className="p-3 bg-red-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold text-red-800">매도 기록</h4>
+                <Button size="sm" variant="outline" onClick={() => addSaleRecord(accountId, stock.id)}>
+                  <Plus className="w-4 h-4 mr-1" />
+                  추가
                 </Button>
               </div>
-            ))}
+
+              {sales.length > 0 ? (
+                <div className="space-y-2">
+                  {sales.map((record) => (
+                    <div key={record.id} className="flex items-center gap-2">
+                      <Input
+                        type="date"
+                        value={record.date}
+                        onChange={(e) => updateSaleRecord(accountId, stock.id, record.id, { date: e.target.value })}
+                        className="w-40"
+                      />
+                      <Input
+                        type="number"
+                        value={record.quantity}
+                        onChange={(e) => updateSaleRecord(accountId, stock.id, record.id, { quantity: Number(e.target.value) })}
+                        className="w-24"
+                        placeholder="수량"
+                      />
+                      <Input
+                        type="number"
+                        value={record.price}
+                        onChange={(e) => updateSaleRecord(accountId, stock.id, record.id, { price: Number(e.target.value) })}
+                        className="w-24"
+                        placeholder="가격"
+                      />
+                      <span className="text-sm text-gray-600">=</span>
+                      <span className="text-sm font-medium">{fmt2((record.quantity || 0) * (record.price || 0))} {stock.currency}</span>
+                      <Button size="sm" variant="ghost" onClick={() => deleteSaleRecord(accountId, stock.id, record.id)}>
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="pt-2 border-t border-red-200">
+                    <div className="flex justify-between text-sm">
+                      <span className="font-semibold">매도 합계</span>
+                      <div className="text-right">
+                        <div className="font-semibold">{fmt2(saleTotal)} {stock.currency}</div>
+                        <div className="text-xs text-gray-600">{fmt2(saleTotalKRW)}원</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-2">매도 기록이 없습니다.</div>
+              )}
+            </div>
           </div>
         )}
-      </div>
+      </Card>
     );
   };
 
   const renderAccount = (account: Account) => {
-    const accountMetrics = calculateAccountMetrics(account);
-    const isEditingAccount = editingAccountId === account.id;
-
-    // 계좌별 파이 차트 데이터
-    const accountPieData = accountMetrics.stocks
-      .filter(({ metrics }) => metrics.totalBuyCostKRW > 0)
-      .map(({ stock, metrics }) => ({
-        name: stock.ticker,
-        value: metrics.totalBuyCostKRW,
-        percentage: accountMetrics.totalCost > 0 ? (metrics.totalBuyCostKRW / accountMetrics.totalCost) * 100 : 0,
-      }));
-
+    const metrics = calculateAccountMetrics(account);
     return (
-      <Card key={account.id} className="p-4 mb-6">
+      <Card key={account.id} className="p-6 bg-white shadow-md">
         <div className="flex items-center justify-between mb-4">
-          {isEditingAccount ? (
-            <div className="flex items-center gap-2 flex-1">
-              <Input
-                value={editingAccountName}
-                onChange={(e) => setEditingAccountName(e.target.value)}
-                className="max-w-xs"
-                autoFocus
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  updateAccountName(account.id, editingAccountName);
-                  setEditingAccountId(null);
-                }}
-              >
-                <Check className="w-4 h-4 text-green-600" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setEditingAccountId(null)}
-              >
-                <X className="w-4 h-4 text-red-600" />
-              </Button>
+          <Input
+            value={account.name}
+            onChange={(e) => updateAccountName(account.id, e.target.value)}
+            className="text-xl font-bold border-none p-0 w-48"
+          />
+          <div className="text-right">
+            <div className="text-sm text-gray-600">총 평가금액</div>
+            <div className="text-xl font-bold">{fmt2(metrics.currentValueKRW)}원</div>
+            <div className={`text-sm font-semibold ${metrics.profitLossKRW >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {metrics.profitLossKRW >= 0 ? '+' : ''}{fmt2(metrics.profitLossKRW)}원 ({metrics.profitLossPercent >= 0 ? '+' : ''}{fmtPct2(metrics.profitLossPercent)})
             </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl">{account.name}</h2>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setEditingAccountId(account.id);
-                  setEditingAccountName(account.name);
-                }}
-              >
-                <Edit2 className="w-4 h-4" />
-              </Button>
-            </div>
-          )}
-          <Button onClick={() => addStock(account.id)} size="sm">
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {account.stocks.map((stock) => renderStock(account.id, stock))}
+          <Button onClick={() => addStock(account.id)} className="w-full" variant="outline">
             <Plus className="w-4 h-4 mr-1" />
-            주식 추가
+            종목 추가
           </Button>
         </div>
-
-        <div className="grid grid-cols-4 gap-4 mb-4 p-4 bg-gray-50 rounded">
-          <div>
-            <div className="text-sm text-gray-600">총 투자금</div>
-            <div>{accountMetrics.totalCost.toLocaleString()}원</div>
-          </div>
-          <div>
-            <div className="text-sm text-gray-600">현재 가치</div>
-            <div>{accountMetrics.totalValue.toLocaleString()}원</div>
-          </div>
-          <div>
-            <div className="text-sm text-gray-600">손익</div>
-            <div className={accountMetrics.totalProfitLoss >= 0 ? 'text-green-600' : 'text-red-600'}>
-              {accountMetrics.totalProfitLoss.toLocaleString()}원
-            </div>
-          </div>
-          <div>
-            <div className="text-sm text-gray-600">손익률</div>
-            <div className={accountMetrics.totalProfitLossRate >= 0 ? 'text-green-600' : 'text-red-600'}>
-              {accountMetrics.totalProfitLossRate.toFixed(2)}%
-            </div>
-          </div>
-        </div>
-
-        {/* 계좌별 파이 차트 */}
-        {accountPieData.length > 0 && (
-          <div className="mb-4 p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg">
-            <h3 className="text-lg mb-2 font-semibold">{account.name} 비중</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={accountPieData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percentage }) => `${name} ${percentage.toFixed(1)}%`}
-                  outerRadius={70}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {accountPieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value: number) => value.toLocaleString() + '원'} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {account.stocks.map((stock) => renderStock(account.id, stock))}
       </Card>
     );
   };
 
+  // 전체 포트폴리오 비중 데이터
+  const portfolioPieData = useMemo(() => {
+    const allStocks = data.accounts.flatMap((acc) => acc.stocks);
+    const validStocks = allStocks.filter((s) => s.ticker && s.quantity > 0);
+    const totalValueKRW = validStocks.reduce((sum, s) => sum + toKRW(s.quantity * s.currentPrice, s.currency), 0);
+    return validStocks
+      .map((s) => {
+        const valueKRW = toKRW(s.quantity * s.currentPrice, s.currency);
+        return {
+          name: s.ticker,
+          value: valueKRW,
+          percentage: totalValueKRW > 0 ? (valueKRW / totalValueKRW) * 100 : 0,
+        };
+      })
+      .sort((a, b) => b.value - a.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.accounts, data.exchangeRate]);
+
+  const accountPieData = useMemo(() => {
+    return data.accounts.map((acc) => {
+      const validStocks = acc.stocks.filter((s) => s.ticker && s.quantity > 0);
+      const totalValueKRW = validStocks.reduce((sum, s) => sum + toKRW(s.quantity * s.currentPrice, s.currency), 0);
+      const pie = validStocks
+        .map((s) => {
+          const valueKRW = toKRW(s.quantity * s.currentPrice, s.currency);
+          return {
+            name: s.ticker,
+            value: valueKRW,
+            percentage: totalValueKRW > 0 ? (valueKRW / totalValueKRW) * 100 : 0,
+          };
+        })
+        .sort((a, b) => b.value - a.value);
+      return { account: acc, pie };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.accounts, data.exchangeRate]);
+
+  // 월별 매도 현황
+  const monthlySalesByAccount = useMemo(() => {
+    return data.accounts.map((acc) => ({ account: acc, monthly: calculateMonthlySales(acc) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.accounts, data.exchangeRate]);
+
+  const resetAll = () => {
+    if (!confirm('주식 데이터(계좌/종목/기록)를 초기화할까요?')) return;
+    setData((prev) => ({
+      ...prev,
+      accounts: [
+        { id: '1', name: '계좌 1', stocks: [] },
+        { id: '2', name: '계좌 2', stocks: [] },
+      ],
+    }));
+  };
+
   return (
-    <div className="space-y-4 p-4 md:p-6 max-w-6xl mx-auto">
-      <div className="flex items-center gap-3 mb-2">
-        <TrendingUp className="w-8 h-8 text-green-600" />
-        <h1 className="text-2xl">주식 포트폴리오</h1>
-      </div>
-
-      {/* 총 합계 */}
-      <Card className="p-6 bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-xl">
-        <div className="flex items-center gap-2 mb-4">
-          <DollarSign className="w-6 h-6" />
-          <h2 className="text-2xl">총 합계</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="space-y-6 max-w-6xl mx-auto">
+      {/* 상단 요약 */}
+      <Card className="p-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-xl">
+        <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm opacity-90">총 투자금</div>
-            <div className="text-xl font-bold">{totalInvestment.toLocaleString()}원</div>
+            <h2 className="text-2xl font-bold mb-1">전체 포트폴리오</h2>
+            <div className="text-sm text-white/80">총 평가금액</div>
+            <div className="text-3xl font-bold">{fmt2(totalMetrics.currentValueKRW)}원</div>
           </div>
-          <div>
-            <div className="text-sm opacity-90">현재 가치</div>
-            <div className="text-xl font-bold">{totalCurrentValue.toLocaleString()}원</div>
-          </div>
-          <div>
-            <div className="text-sm opacity-90">총 손익</div>
-            <div className={`text-xl font-bold ${totalProfitLoss >= 0 ? 'text-yellow-300' : 'text-red-300'}`}>
-              {totalProfitLoss.toLocaleString()}원
+          <div className="text-right">
+            <div className="text-sm text-white/80">총 손익</div>
+            <div className={`text-2xl font-bold ${totalMetrics.profitLossKRW >= 0 ? 'text-green-200' : 'text-red-200'}`}>
+              {totalMetrics.profitLossKRW >= 0 ? '+' : ''}{fmt2(totalMetrics.profitLossKRW)}원
             </div>
-          </div>
-          <div>
-            <div className="text-sm opacity-90">손익률</div>
-            <div className={`text-xl font-bold ${totalProfitLossRate >= 0 ? 'text-yellow-300' : 'text-red-300'}`}>
-              {totalProfitLossRate.toFixed(2)}%
+            <div className={`text-lg ${totalMetrics.profitLossPercent >= 0 ? 'text-green-200' : 'text-red-200'}`}>
+              {totalMetrics.profitLossPercent >= 0 ? '+' : ''}{fmtPct2(totalMetrics.profitLossPercent)}
             </div>
           </div>
         </div>
-      </Card>
-
-      {/* 환율 설정 */}
-      <Card className="p-4 bg-gradient-to-br from-amber-50 to-amber-100 shadow-md">
-        <div className="flex items-center gap-4">
-          <label className="font-semibold text-amber-900">환율 (USD → KRW):</label>
-          <Input
-            type="number"
-            value={data.exchangeRate}
-            onChange={(e) => setData({ ...data, exchangeRate: Number(e.target.value) })}
-            className="w-40"
-            placeholder="1100"
-          />
-          <span className="text-sm text-gray-600">원/$</span>
-          <span className="text-xs text-gray-500">* 모든 USD 금액이 이 환율로 원화 변환됩니다</span>
+        <div className="mt-4 flex justify-end">
+          <Button variant="secondary" onClick={resetAll} className="text-xs">
+            <RotateCcw className="w-4 h-4 mr-1" />
+            전체 초기화
+          </Button>
         </div>
       </Card>
 
-      {/* 섹터별 비중 차트 */}
-      {pieData.length > 0 && (
-        <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-100 shadow-md">
-          <div className="flex items-center gap-2 mb-4">
-            <PieChartIcon className="w-5 h-5 text-indigo-600" />
-            <h2 className="text-xl text-indigo-900">포트폴리오 비중</h2>
+      {/* 환율 */}
+      <Card className="p-4 bg-white shadow-md">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-blue-600" />
+            <h3 className="text-lg font-semibold">환율 (USD → KRW)</h3>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percentage }) => `${name} ${percentage.toFixed(1)}%`}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {pieData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value: number) => value.toLocaleString() + '원'} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </Card>
-      )}
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              value={data.exchangeRate}
+              onChange={(e) => setData((prev) => ({ ...prev, exchangeRate: Number(e.target.value) }))}
+              className="w-32"
+            />
+            <span className="text-sm text-gray-600">원</span>
+          </div>
+        </div>
+        <div className="text-xs text-gray-500 mt-1">이 값이 주식/대기표 등 모든 USD 계산에 공통으로 적용돼요.</div>
+      </Card>
 
-      {/* 계좌별 주식 */}
-      {data.accounts.map((account) => renderAccount(account))}
+      {/* 계좌 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">{data.accounts.map((acc) => renderAccount(acc))}</div>
 
-      {/* 월별 매도 금액 섹션 */}
+      {/* 월별 매도 현황 */}
       <Card className="p-6 bg-white shadow-md">
-        <h2 className="text-2xl mb-4">월별 매도 금액 추이</h2>
-        
-        {data.accounts.map((account) => {
-          const salesData = calculateMonthlySales(account.id);
-          const totalSales = salesData.reduce((sum, item) => sum + item.매도금액, 0);
-          
-          if (totalSales === 0) return null;
+        <h2 className="text-2xl mb-4">월별 매도 현황</h2>
+        <div className="space-y-8">
+          {monthlySalesByAccount.map(({ account, monthly }) => {
+            const totalSales = monthly.reduce((sum, m) => sum + m.salesKRW, 0);
+            return (
+              <div key={account.id} className="border rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="font-semibold">{account.name}</div>
+                  <div className="text-sm text-gray-600">총 매도금액: <span className="font-semibold">{fmt2(totalSales)}원</span></div>
+                </div>
 
-          return (
-            <div key={account.id} className="mb-8">
-              <h3 className="text-xl mb-4 text-blue-800">{account.name} - 월별 매도</h3>
-              
-              {/* 그래프 */}
-              <div className="mb-4">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={salesData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip 
-                      formatter={(value: number) => value.toLocaleString() + '원'}
-                      labelStyle={{ color: '#000' }}
-                    />
-                    <Legend />
-                    <Bar dataKey="매도금액" fill="#10b981" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+                {monthly.length > 0 ? (
+                  <>
+                    <div className="h-56 mb-4">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={monthly}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" />
+                          <YAxis />
+                          <Tooltip formatter={(value: any) => [`${fmt2(Number(value))}원`, '매도금액']} />
+                          <Legend />
+                          <Line type="monotone" dataKey="salesKRW" strokeWidth={2} name="매도금액" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
 
-              {/* 테이블 */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300 bg-gray-100">
-                      <th className="p-3 text-left">월</th>
-                      <th className="p-3 text-right">매도금액</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {salesData.map((item, index) => (
-                      <tr key={index} className="border-b border-gray-200 hover:bg-gray-50">
-                        <td className="p-3">{item.month}</td>
-                        <td className="p-3 text-right font-semibold text-green-600">
-                          {item.매도금액.toLocaleString()}원
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="bg-gray-100 font-bold">
-                      <td className="p-3">총 매도금액</td>
-                      <td className="p-3 text-right text-lg text-green-700">
-                        {totalSales.toLocaleString()}원
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2">월</th>
+                            <th className="text-right py-2">매도금액(KRW)</th>
+                            <th className="text-right py-2">매도수량</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {monthly.map((m) => (
+                            <tr key={m.month} className="border-b">
+                              <td className="py-2">{m.month}</td>
+                              <td className="py-2 text-right font-medium">{fmt2(m.salesKRW)}원</td>
+                              <td className="py-2 text-right">{fmt2(m.quantity)}주</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-gray-500 text-sm">매도 기록이 없습니다.</div>
+                )}
               </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* ✅ 비중 그래프: 제일 하단 */}
+      <Card className="p-6 bg-white shadow-md">
+        <h2 className="text-2xl mb-4">비중 그래프</h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {accountPieData.map(({ account, pie }) => (
+            <div key={account.id} className="border rounded-lg p-4">
+              <div className="font-semibold mb-2">{account.name} 비중</div>
+              {pie.length > 0 ? (
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pie}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percentage }) => `${name} ${Number(percentage).toFixed(1)}%`}
+                        outerRadius={90}
+                        dataKey="value"
+                      >
+                        {pie.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: any) => [`${fmt2(Number(value))}원`, '평가금액']} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="text-gray-500 text-sm">보유 종목이 없습니다.</div>
+              )}
             </div>
-          );
-        })}
+          ))}
+        </div>
 
-        {data.accounts.every((account) => {
-          const salesData = calculateMonthlySales(account.id);
-          return salesData.reduce((sum, item) => sum + item.매도금액, 0) === 0;
-        }) && (
-          <div className="text-center text-gray-500 py-8">
-            아직 매도 내역이 없습니다.
-          </div>
-        )}
+        <div className="mt-8 border rounded-lg p-4">
+          <div className="font-semibold mb-2">전체 포트폴리오 비중</div>
+          {portfolioPieData.length > 0 ? (
+            <div className="h-96">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={portfolioPieData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percentage }) => `${name} ${Number(percentage).toFixed(1)}%`}
+                    outerRadius={140}
+                    dataKey="value"
+                  >
+                    {portfolioPieData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: any) => [`${fmt2(Number(value))}원`, '평가금액']} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="text-gray-500 text-sm">보유 종목이 없습니다.</div>
+          )}
+        </div>
       </Card>
     </div>
   );
