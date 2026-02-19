@@ -17,8 +17,42 @@ export function CloudSyncPanel() {
   const [loginCooldown, setLoginCooldown] = useState(false);
 
   const lastPushedRef = useRef<string>('');
-  const reloadedAfterPullRef = useRef(false);
-  const pushingRef = useRef(false);
+const pushingRef = useRef(false);
+
+// ✅ 자동 새로고침은 너무 자주 하면 화면이 튕겨서 불편함
+// - 다른 기기(회사/집/폰)에서 값이 바뀌었을 때만 새로고침을 걸어주는데,
+// - 빈도는 "1시간에 1번"으로 제한한다.
+const AUTO_RELOAD_INTERVAL_MS = 60 * 60 * 1000; // 1시간
+const AUTO_RELOAD_TS_KEY = 'cloudSyncLastAutoReloadAt';
+
+const getLastAutoReloadAt = () => {
+  try {
+    return Number(sessionStorage.getItem(AUTO_RELOAD_TS_KEY) || '0');
+  } catch {
+    return 0;
+  }
+};
+
+const canAutoReloadNow = () => {
+  const last = getLastAutoReloadAt();
+  return Date.now() - last >= AUTO_RELOAD_INTERVAL_MS;
+};
+
+const markAutoReloadNow = () => {
+  try {
+    sessionStorage.setItem(AUTO_RELOAD_TS_KEY, String(Date.now()));
+  } catch {
+    // ignore
+  }
+};
+
+const clearAutoReloadMark = () => {
+  try {
+    sessionStorage.removeItem(AUTO_RELOAD_TS_KEY);
+  } catch {
+    // ignore
+  }
+};
 
   const origin = useMemo(() => {
     try {
@@ -66,6 +100,7 @@ export function CloudSyncPanel() {
   const signOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
+    clearAutoReloadMark();
     setStatus('idle');
     setMessage('로그아웃 됐어.');
   };
@@ -87,16 +122,23 @@ export function CloudSyncPanel() {
         if (cancelled) return;
 
         if (cloudPayload && Object.keys(cloudPayload).length > 0) {
-          // 클라우드 값으로 로컬 저장을 덮어쓰기
-          writeLocalStoragePayload(cloudPayload);
-          // 컴포넌트들이 localStorage에서 초기값을 읽는 구조라, 한번 새로고침하면 깔끔하게 반영됨
-          if (!reloadedAfterPullRef.current) {
-            reloadedAfterPullRef.current = true;
-            setMessage('회사/다른 기기 값으로 맞췄어. 새로고침 한 번 할게!');
-            setTimeout(() => window.location.reload(), 600);
-            return;
+          // 클라우드 값으로 로컬 저장을 덮어쓰기 (바뀐 게 있을 때만)
+          const localBefore = readLocalStoragePayload();
+          const isSame = Object.keys(cloudPayload).every((k) => localBefore[k] === cloudPayload[k]);
+          if (!isSame) {
+            writeLocalStoragePayload(cloudPayload);
           }
-        }
+          // 컴포넌트들이 localStorage에서 초기값을 읽는 구조라, 새로고침이 필요할 수 있음
+// 하지만 계속 새로고침되면 사용이 불가하니 "1시간에 1번"으로 제한한다.
+if (!isSame && canAutoReloadNow()) {
+  markAutoReloadNow();
+  setMessage('회사/다른 기기 값으로 맞췄어. 새로고침 한 번 할게!');
+  setTimeout(() => window.location.reload(), 600);
+  return;
+} else {
+  setMessage(isSame ? '동기화 확인 완료.' : '회사/다른 기기 값으로 맞췄어. (자동 새로고침은 1시간에 1번만 할게)');
+}
+}
 
         // 처음 로그인인데 클라우드에 데이터가 없으면: 현재 로컬 값을 올려서 "기준"을 만든다
         const localPayload = readLocalStoragePayload();
@@ -116,6 +158,41 @@ export function CloudSyncPanel() {
       cancelled = true;
     };
   }, [user, loading]);
+// 1-b) 로그인 상태에서: 1시간마다 "다른 기기에서 바뀐 값"이 있는지 확인하기
+useEffect(() => {
+  if (!user) return;
+  if (status === 'error') return;
+  if (!supabase) return;
+
+  const timer = setInterval(async () => {
+    try {
+      const cloudPayload = await pullFromCloud(user.id);
+      if (!cloudPayload || Object.keys(cloudPayload).length === 0) return;
+
+      // cloudPayload에 있는 키들만 비교 (로컬에 다른 키가 더 있어도 OK)
+      const localPayload = readLocalStoragePayload();
+      const isSame = Object.keys(cloudPayload).every((k) => localPayload[k] === cloudPayload[k]);
+      if (isSame) return;
+
+      // 다른 기기에서 변경된 값 발견 → 로컬 덮어쓰기
+      writeLocalStoragePayload(cloudPayload);
+
+      // 화면 반영을 위해 새로고침이 필요할 수 있음(하지만 1시간에 1번으로 제한)
+      if (canAutoReloadNow()) {
+        markAutoReloadNow();
+        setMessage('다른 기기에서 값이 바뀌었어. 새로고침 한 번 할게!');
+        setTimeout(() => window.location.reload(), 600);
+      } else {
+        setMessage('다른 기기에서 값이 바뀌었어. (자동 새로고침은 1시간에 1번만 해)');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, AUTO_RELOAD_INTERVAL_MS);
+
+  return () => clearInterval(timer);
+}, [user, status]);
+
 
   // 2) 로그인 상태에서: 주기적으로 "변경된 값"을 클라우드로 올리기
   useEffect(() => {
