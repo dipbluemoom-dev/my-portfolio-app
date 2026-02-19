@@ -66,6 +66,12 @@ export function StockPortfolio() {
     localStorage.setItem('stockPortfolio', JSON.stringify(data));
   }, [data]);
 
+  // 다른 화면(주식 대기표 등)에서도 같은 환율을 쓰기 위해 별도 키로도 저장
+  useEffect(() => {
+    localStorage.setItem('stockExchangeRate', String(data.exchangeRate ?? 0));
+    window.dispatchEvent(new CustomEvent('stockExchangeRateChanged', { detail: data.exchangeRate }));
+  }, [data.exchangeRate]);
+
   const updateAccountName = (accountId: string, name: string) => {
     setData({
       ...data,
@@ -269,31 +275,52 @@ export function StockPortfolio() {
   };
 
   const calculateStockMetrics = (stock: Stock) => {
-    const totalQuantity = stock.purchases.reduce((sum, p) => sum + p.quantity, 0);
-    const soldQuantity = stock.sales.reduce((sum, s) => sum + s.quantity, 0);
-    const currentQuantity = totalQuantity - soldQuantity;
-    
-    const totalCost = stock.purchases.reduce((sum, p) => sum + p.quantity * p.price, 0);
-    const avgPrice = totalQuantity > 0 ? totalCost / totalQuantity : 0;
-    const currentValue = currentQuantity * stock.currentPrice;
-    const profitLoss = currentValue - totalCost;
-    const profitLossRate = totalCost > 0 ? (profitLoss / totalCost) * 100 : 0;
+    // ✅ 매수 기록(분할매수) 합계
+    const totalBuyQuantity = stock.purchases.reduce((sum, p) => sum + p.quantity, 0);
+    const totalBuyCost = stock.purchases.reduce((sum, p) => sum + p.quantity * p.price, 0);
 
-    // Convert to KRW for totals
-    const totalCostKRW = toKRW(totalCost, stock.currency);
+    // ✅ 매도 기록 합계
+    const soldQuantity = stock.sales.reduce((sum, s) => sum + s.quantity, 0);
+    const totalSellProceeds = stock.sales.reduce((sum, s) => sum + s.quantity * s.price, 0);
+
+    // 평균 매입단가(간단 평균법)
+    const avgPrice = totalBuyQuantity > 0 ? totalBuyCost / totalBuyQuantity : 0;
+
+    // 현재 보유 수량
+    const currentQuantity = totalBuyQuantity - soldQuantity;
+
+    // 평가금액(보유수량 * 현재가)
+    const currentValue = Math.max(0, currentQuantity) * stock.currentPrice;
+
+    // ✅ 손익은 "총 매수금액" 기준으로 계산(사용자가 매수기록에 입력한 합계와 맞춰서 보여주기)
+    //   - 매도를 많이 섞어 계산하면 복잡해져서, 여기서는 단순히 "평가금액 - 총 매수금액"으로 통일
+    const profitLoss = currentValue - totalBuyCost;
+    const profitLossRate = totalBuyCost > 0 ? (profitLoss / totalBuyCost) * 100 : 0;
+
+    // 목표가 기준 기대수익률(평단 → 목표가)
+    const targetProfitRate = avgPrice > 0 ? ((stock.targetPrice - avgPrice) / avgPrice) * 100 : 0;
+
+    // 원화 환산 값
+    const totalBuyCostKRW = toKRW(totalBuyCost, stock.currency);
     const currentValueKRW = toKRW(currentValue, stock.currency);
+    const profitLossKRW = currentValueKRW - totalBuyCostKRW;
+    const totalSellProceedsKRW = toKRW(totalSellProceeds, stock.currency);
 
     return {
-      totalQuantity,
+      totalBuyQuantity,
       soldQuantity,
       currentQuantity,
-      totalCost,
-      totalCostKRW,
+      totalBuyCost,
+      totalBuyCostKRW,
       avgPrice,
       currentValue,
       currentValueKRW,
       profitLoss,
+      profitLossKRW,
       profitLossRate,
+      targetProfitRate,
+      totalSellProceeds,
+      totalSellProceedsKRW,
     };
   };
 
@@ -303,7 +330,7 @@ export function StockPortfolio() {
       metrics: calculateStockMetrics(stock),
     }));
 
-    const totalCost = stocks.reduce((sum, { metrics }) => sum + metrics.totalCostKRW, 0);
+    const totalCost = stocks.reduce((sum, { metrics }) => sum + metrics.totalBuyCostKRW, 0);
     const totalValue = stocks.reduce((sum, { metrics }) => sum + metrics.currentValueKRW, 0);
     const totalProfitLoss = totalValue - totalCost;
     const totalProfitLossRate = totalCost > 0 ? (totalProfitLoss / totalCost) * 100 : 0;
@@ -350,25 +377,28 @@ export function StockPortfolio() {
     }))
   );
 
-  const totalInvestment = allStocks.reduce((sum, { metrics }) => sum + metrics.totalCostKRW, 0);
+  const totalInvestment = allStocks.reduce((sum, { metrics }) => sum + metrics.totalBuyCostKRW, 0);
   const totalCurrentValue = allStocks.reduce((sum, { metrics }) => sum + metrics.currentValueKRW, 0);
   const totalProfitLoss = totalCurrentValue - totalInvestment;
   const totalProfitLossRate = totalInvestment > 0 ? (totalProfitLoss / totalInvestment) * 100 : 0;
 
   const pieData = allStocks
-    .filter(({ metrics }) => metrics.totalCost > 0)
+    .filter(({ metrics }) => metrics.totalBuyCostKRW > 0)
     .map(({ stock, metrics }) => ({
       name: stock.ticker,
-      value: metrics.totalCost,
-      percentage: totalInvestment > 0 ? (metrics.totalCost / totalInvestment) * 100 : 0,
+      value: metrics.totalBuyCostKRW,
+      percentage: totalInvestment > 0 ? (metrics.totalBuyCostKRW / totalInvestment) * 100 : 0,
     }));
 
   const renderStock = (accountId: string, stock: Stock) => {
     const metrics = calculateStockMetrics(stock);
     const isExpanded = expandedStocks.has(stock.id);
 
+    const showKRWSub = stock.currency === 'USD' && data.exchangeRate > 0;
+    const unit = stock.currency === 'USD' ? '$' : '원';
+
     return (
-      <div key={stock.id} className="border rounded-lg p-4 mb-4">
+      <div key={stock.id} className="border rounded-xl p-4 mb-4 bg-white shadow-sm">
         <div className="flex items-center gap-2 mb-2">
           <Input
             value={stock.ticker}
@@ -408,21 +438,51 @@ export function StockPortfolio() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 text-sm mb-2">
-          <div>총 구매가: {metrics.totalCost.toLocaleString()}{stock.currency === 'USD' ? '$' : '원'}</div>
-          <div>현재 가치: {metrics.currentValue.toLocaleString()}{stock.currency === 'USD' ? '$' : '원'}</div>
-          <div className={metrics.profitLoss >= 0 ? 'text-green-600' : 'text-red-600'}>
-            손익: {metrics.profitLoss.toLocaleString()}{stock.currency === 'USD' ? '$' : '원'} ({metrics.profitLossRate.toFixed(2)}%)
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-2">
+          <div>
+            <div className="text-gray-500">총 구매가(매수합)</div>
+            <div className="font-semibold">{metrics.totalBuyCost.toLocaleString()}{unit}</div>
+            {showKRWSub && <div className="text-xs text-gray-400">≈ {metrics.totalBuyCostKRW.toLocaleString()}원</div>}
           </div>
-          <div>평균 단가: {metrics.avgPrice.toFixed(2)}{stock.currency === 'USD' ? '$' : '원'}</div>
-          <div>총 수량: {metrics.totalQuantity}</div>
-          <div>비중: {totalInvestment > 0 ? ((metrics.totalCost / totalInvestment) * 100).toFixed(2) : 0}%</div>
+
+          <div>
+            <div className="text-gray-500">평단가</div>
+            <div className="font-semibold">{metrics.avgPrice.toFixed(4)}{unit}</div>
+          </div>
+
+          <div>
+            <div className="text-gray-500">보유 수량</div>
+            <div className="font-semibold">{Math.max(0, metrics.currentQuantity).toLocaleString()}주</div>
+          </div>
+
+          <div>
+            <div className="text-gray-500">평가금액</div>
+            <div className="font-semibold">{metrics.currentValue.toLocaleString()}{unit}</div>
+            <div className="text-xs text-gray-500">{metrics.currentValueKRW.toLocaleString()}원</div>
+          </div>
+
+          <div>
+            <div className="text-gray-500">손익</div>
+            <div className={metrics.profitLoss >= 0 ? 'font-semibold text-green-600' : 'font-semibold text-red-600'}>
+              {metrics.profitLoss.toLocaleString()}{unit} ({metrics.profitLossRate.toFixed(2)}%)
+            </div>
+            <div className={metrics.profitLossKRW >= 0 ? 'text-xs text-green-600' : 'text-xs text-red-600'}>
+              {metrics.profitLossKRW.toLocaleString()}원
+            </div>
+          </div>
+
+          <div>
+            <div className="text-gray-500">목표가 이익률</div>
+            <div className={metrics.targetProfitRate >= 0 ? 'font-semibold text-green-600' : 'font-semibold text-red-600'}>
+              {metrics.targetProfitRate.toFixed(2)}%
+            </div>
+          </div>
         </div>
 
         {isExpanded && (
           <div className="mt-4 border-t pt-4">
             <div className="flex items-center justify-between mb-2">
-              <h4>분할 매수 내역</h4>
+              <h4>매수기록</h4>
               <Button size="sm" onClick={() => addPurchase(accountId, stock.id)}>
                 <Plus className="w-4 h-4 mr-1" />
                 추가
@@ -468,7 +528,7 @@ export function StockPortfolio() {
             ))}
 
             <div className="flex items-center justify-between mb-2 mt-4">
-              <h4>분할 매도 내역</h4>
+              <h4>매도기록</h4>
               <Button size="sm" onClick={() => addSale(accountId, stock.id)}>
                 <Plus className="w-4 h-4 mr-1" />
                 추가
@@ -539,11 +599,11 @@ export function StockPortfolio() {
 
     // 계좌별 파이 차트 데이터
     const accountPieData = accountMetrics.stocks
-      .filter(({ metrics }) => metrics.totalCost > 0)
+      .filter(({ metrics }) => metrics.totalBuyCostKRW > 0)
       .map(({ stock, metrics }) => ({
         name: stock.ticker,
-        value: metrics.totalCost,
-        percentage: accountMetrics.totalCost > 0 ? (metrics.totalCost / accountMetrics.totalCost) * 100 : 0,
+        value: metrics.totalBuyCostKRW,
+        percentage: accountMetrics.totalCost > 0 ? (metrics.totalBuyCostKRW / accountMetrics.totalCost) * 100 : 0,
       }));
 
     return (

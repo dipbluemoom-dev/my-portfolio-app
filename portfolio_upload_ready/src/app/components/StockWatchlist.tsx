@@ -21,6 +21,22 @@ interface WatchlistData {
 }
 
 export function StockWatchlist() {
+  const getGlobalExchangeRate = () => {
+    const direct = localStorage.getItem('stockExchangeRate');
+    if (direct && !Number.isNaN(Number(direct))) return Number(direct);
+    const portfolio = localStorage.getItem('stockPortfolio');
+    if (portfolio) {
+      try {
+        const parsed = JSON.parse(portfolio);
+        const v = Number(parsed?.exchangeRate);
+        if (!Number.isNaN(v)) return v;
+      } catch {}
+    }
+    return 0;
+  };
+
+  const [exchangeRate, setExchangeRate] = useState<number>(() => getGlobalExchangeRate());
+
   const [data, setData] = useState<WatchlistData>(() => {
     const saved = localStorage.getItem('stockWatchlist');
     if (saved) {
@@ -37,6 +53,24 @@ export function StockWatchlist() {
   useEffect(() => {
     localStorage.setItem('stockWatchlist', JSON.stringify(data));
   }, [data]);
+
+  // 주식 포트폴리오에서 환율을 바꾸면 여기에도 자동 반영
+  useEffect(() => {
+    const onChanged = (e: Event) => {
+      const rate = (e as CustomEvent).detail;
+      if (typeof rate === 'number') setExchangeRate(rate);
+    };
+    window.addEventListener('stockExchangeRateChanged', onChanged);
+
+    // 탭 이동/새로고침 등에서 값이 바뀔 수 있으니 포커스 때도 한 번 동기화
+    const onFocus = () => setExchangeRate(getGlobalExchangeRate());
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      window.removeEventListener('stockExchangeRateChanged', onChanged);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, []);
 
   const addStock = (tier: keyof WatchlistData) => {
     const newStock: WatchlistStock = {
@@ -97,6 +131,10 @@ export function StockWatchlist() {
               const expectedReturn = calculateReturn(stock.currentPrice, stock.targetPrice);
               const totalInvestment = stock.currentPrice * stock.quantity;
               const expectedProfit = (stock.targetPrice - stock.currentPrice) * stock.quantity;
+
+              const showKRW = stock.currency === 'USD' && exchangeRate > 0;
+              const totalInvestmentKRW = showKRW ? totalInvestment * exchangeRate : 0;
+              const expectedProfitKRW = showKRW ? expectedProfit * exchangeRate : 0;
 
               return (
                 <div key={stock.id} className="border rounded-lg p-4">
@@ -186,7 +224,12 @@ export function StockWatchlist() {
                     </div>
                     <div>
                       <div className="text-sm text-gray-600">예상 투자금</div>
-                      <div>{totalInvestment.toLocaleString()}{stock.currency === 'USD' ? '$' : '원'}</div>
+                      <div>
+                        {totalInvestment.toLocaleString()}{stock.currency === 'USD' ? '$' : '원'}
+                        {showKRW && (
+                          <div className="text-xs text-gray-500">≈ {Math.round(totalInvestmentKRW).toLocaleString()}원</div>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <div className="text-sm text-gray-600">예상 수익</div>
@@ -196,6 +239,9 @@ export function StockWatchlist() {
                         }`}
                       >
                         {expectedProfit.toLocaleString()}{stock.currency === 'USD' ? '$' : '원'}
+                        {showKRW && (
+                          <div className="text-xs text-gray-500">≈ {Math.round(expectedProfitKRW).toLocaleString()}원</div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -214,6 +260,12 @@ export function StockWatchlist() {
         <List className="w-8 h-8 text-purple-600" />
         <h1 className="text-2xl">주식 대기표</h1>
       </div>
+
+      <div className="text-sm text-gray-600">
+        환율: <span className="font-semibold">{exchangeRate ? exchangeRate.toLocaleString() : '미설정'}</span> 원/$
+        <span className="text-xs text-gray-500"> (주식 포트폴리오에서 입력한 값이 자동 적용됩니다)</span>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {renderTier('tier1', '1차 대기')}
         {renderTier('tier2', '2차 대기')}

@@ -14,9 +14,11 @@ export function CloudSyncPanel() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'waiting' | 'syncing' | 'ready' | 'error'>('idle');
   const [message, setMessage] = useState<string>('');
   const [lastSyncText, setLastSyncText] = useState<string>('');
+  const [loginCooldown, setLoginCooldown] = useState(false);
 
   const lastPushedRef = useRef<string>('');
   const reloadedAfterPullRef = useRef(false);
+  const pushingRef = useRef(false);
 
   const origin = useMemo(() => {
     try {
@@ -35,14 +37,20 @@ export function CloudSyncPanel() {
       setMessage('이메일을 입력해줘.');
       return;
     }
+    if (loginCooldown) {
+      setMessage('로그인 메일을 너무 자주 보낼 수 없어. 1분 정도 뒤에 다시 눌러줘.');
+      return;
+    }
     try {
       setStatus('sending');
       setMessage('');
+      // Supabase 메일 전송은 rate limit이 있어서, 실수로 연타해도 1분간은 막아둔다
+      setLoginCooldown(true);
+      setTimeout(() => setLoginCooldown(false), 60_000);
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
-          emailRedirectTo: window.location.origin
-
+          emailRedirectTo: origin,
         },
       });
       if (error) throw error;
@@ -109,7 +117,7 @@ export function CloudSyncPanel() {
     };
   }, [user, loading]);
 
-  // 2) 로그인 상태에서: 5초마다 "변경된 값"을 클라우드로 올리기
+  // 2) 로그인 상태에서: 주기적으로 "변경된 값"을 클라우드로 올리기
   useEffect(() => {
     if (!user) return;
     if (status === 'error') return;
@@ -117,22 +125,30 @@ export function CloudSyncPanel() {
 
     const timer = setInterval(async () => {
       try {
+        // 이미 업로드 중이면 중복 호출 방지
+        if (pushingRef.current) return;
+
         const payload = readLocalStoragePayload();
         const json = JSON.stringify(payload);
         if (json === lastPushedRef.current) return;
 
+        // 입력 중(커서가 인풋에 있을 때)에는 너무 자주 업로드하지 않도록 한 템포 늦춘다
+        const active = document.activeElement as HTMLElement | null;
+        const isTyping = !!active && ['INPUT', 'TEXTAREA'].includes(active.tagName);
+        if (isTyping) return;
+
+        pushingRef.current = true;
         await pushToCloud(user.id, payload);
         lastPushedRef.current = json;
         setLastSyncText(new Date().toLocaleString());
-        if (status !== 'ready') {
-          setStatus('ready');
-          setMessage('동기화 ON');
-        }
+        if (status !== 'ready') setStatus('ready');
       } catch (e) {
         // 일시적인 네트워크 오류는 그냥 무시(다음 주기에 재시도)
         console.error(e);
+      } finally {
+        pushingRef.current = false;
       }
-    }, 5000);
+    }, 20000);
 
     return () => clearInterval(timer);
   }, [user, status]);
@@ -164,8 +180,8 @@ export function CloudSyncPanel() {
               className="w-full md:w-[260px]"
               type="email"
             />
-            <Button onClick={signIn} disabled={status === 'sending'}>
-              {status === 'sending' ? '보내는 중...' : '로그인 링크 받기'}
+            <Button onClick={signIn} disabled={status === 'sending' || loginCooldown}>
+              {status === 'sending' ? '보내는 중...' : loginCooldown ? '잠시 후 다시' : '로그인 링크 받기'}
             </Button>
           </div>
         ) : (
