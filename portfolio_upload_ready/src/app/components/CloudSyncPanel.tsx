@@ -41,7 +41,8 @@ export function CloudSyncPanel() {
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
-          emailRedirectTo: origin,
+          emailRedirectTo: window.location.origin
+
         },
       });
       if (error) throw error;
