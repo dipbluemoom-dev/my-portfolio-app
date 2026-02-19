@@ -4,6 +4,7 @@ import { StockPortfolio } from './components/StockPortfolio';
 import { StockWatchlist } from './components/StockWatchlist';
 import { BankAccounts } from './components/BankAccounts';
 import { AssetTrend } from './components/AssetTrend';
+import { CloudSyncPanel } from './components/CloudSyncPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Wallet, TrendingUp, List, Landmark, LineChart } from 'lucide-react';
 import { Button } from './components/ui/button';
@@ -35,6 +36,9 @@ export default function App() {
             자산 포트폴리오
           </h1>
         </div>
+
+        {/* ✅ 회사/집/폰 값 동기화 패널 */}
+        <CloudSyncPanel />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-5 mb-4 h-auto bg-white shadow-lg rounded-xl p-1">
