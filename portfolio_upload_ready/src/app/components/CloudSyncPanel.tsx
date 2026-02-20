@@ -1,274 +1,283 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import {
+  pullFromCloud,
+  pushToCloud,
+  readLocalStoragePayload,
+  writeLocalStoragePayload,
+} from '../lib/cloudSync';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Card } from './ui/card';
-import { useSupabaseSession } from '../hooks/useSupabaseSession';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
-import { pullFromCloud, pushToCloud, readLocalStoragePayload, writeLocalStoragePayload } from '../lib/cloudSync';
 
-// 일반인용: "동기화"는 회사/집/폰에서 같은 값을 보이게 해주는 기능
+function shallowEqualPayload(a: Record<string, string>, b: Record<string, string>) {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const k of aKeys) {
+    if (a[k] !== b[k]) return false;
+  }
+  return true;
+}
 
-export function CloudSyncPanel() {
-  const { user, loading } = useSupabaseSession();
+const AUTO_PULL_INTERVAL_MS = 30_000; // 30초마다 서버 확인
+const AUTO_PUSH_INTERVAL_MS = 120_000; // 2분마다 자동 업로드(너무 잦으면 사용감 저하)
+const AUTO_RELOAD_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1시간
+const AUTO_RELOAD_KEY = 'cloudSyncLastAutoReloadAt';
+
+export function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void }) {
+  if (!isSupabaseConfigured || !supabase) {
+    return (
+      <div className="p-4 rounded-2xl border bg-white shadow-sm">
+        <div className="font-semibold mb-1">동기화</div>
+        <div className="text-sm text-red-600">
+          Supabase 설정이 아직 안 되어있어. (Vercel 환경변수 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 필요)
+        </div>
+      </div>
+    );
+  }
+
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<'idle' | 'sending' | 'waiting' | 'syncing' | 'ready' | 'error'>('idle');
-  const [message, setMessage] = useState<string>('');
-  const [lastSyncText, setLastSyncText] = useState<string>('');
-  const [loginCooldown, setLoginCooldown] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'loggedIn' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+  const [userId, setUserId] = useState<string | null>(null);
+  const [autoReloadDisabled, setAutoReloadDisabled] = useState(false);
 
-  const lastPushedRef = useRef<string>('');
-const pushingRef = useRef(false);
+  // 로그인 링크(메일) 너무 자주 누르지 않도록
+  const lastEmailSentAtRef = useRef<number>(0);
 
-// ✅ 자동 새로고침은 너무 자주 하면 화면이 튕겨서 불편함
-// - 다른 기기(회사/집/폰)에서 값이 바뀌었을 때만 새로고침을 걸어주는데,
-// - 빈도는 "1시간에 1번"으로 제한한다.
-const AUTO_RELOAD_INTERVAL_MS = 60 * 60 * 1000; // 1시간
-const AUTO_RELOAD_TS_KEY = 'cloudSyncLastAutoReloadAt';
+  // 자동 새로고침 루프 방지(스토리지 막힌 환경 대비)
+  const lastAutoReloadAtRef = useRef<number>(0);
 
-const getLastAutoReloadAt = () => {
-  try {
-    return Number(sessionStorage.getItem(AUTO_RELOAD_TS_KEY) || '0');
-  } catch {
-    return 0;
-  }
-};
-
-const canAutoReloadNow = () => {
-  const last = getLastAutoReloadAt();
-  return Date.now() - last >= AUTO_RELOAD_INTERVAL_MS;
-};
-
-const markAutoReloadNow = () => {
-  try {
-    sessionStorage.setItem(AUTO_RELOAD_TS_KEY, String(Date.now()));
-  } catch {
-    // ignore
-  }
-};
-
-const clearAutoReloadMark = () => {
-  try {
-    sessionStorage.removeItem(AUTO_RELOAD_TS_KEY);
-  } catch {
-    // ignore
-  }
-};
-
-  const origin = useMemo(() => {
+  const getLastAutoReloadAt = () => {
+    if (autoReloadDisabled) return Date.now();
     try {
-      return window.location.origin;
+      const v = localStorage.getItem(AUTO_RELOAD_KEY);
+      return v ? Number(v) || 0 : 0;
+    } catch {
+      return lastAutoReloadAtRef.current || 0;
+    }
+  };
+
+  const markAutoReloadNow = () => {
+    const now = Date.now();
+    lastAutoReloadAtRef.current = now;
+    try {
+      localStorage.setItem(AUTO_RELOAD_KEY, String(now));
+    } catch {
+      // iOS 일부 환경/인앱브라우저에서 스토리지가 막히면 무한 새로고침이 될 수 있어서
+      // 그 경우 자동 새로고침 기능 자체를 꺼버림
+      setAutoReloadDisabled(true);
+    }
+  };
+
+  const canAutoReloadNow = () => {
+    if (autoReloadDisabled) return false;
+    const last = getLastAutoReloadAt();
+    return Date.now() - last >= AUTO_RELOAD_MIN_INTERVAL_MS;
+  };
+
+  useEffect(() => {
+    // 세션 복구
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.user?.id) {
+          setUserId(data.session.user.id);
+          setStatus('loggedIn');
+          setMessage('로그인 됨');
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const uid = session?.user?.id || null;
+      setUserId(uid);
+      if (uid) {
+        setStatus('loggedIn');
+        setMessage('로그인 됨');
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const sendMagicLink = async () => {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setStatus('error');
+      setMessage('이메일을 입력해줘');
+      return;
+    }
+
+    // 5분 쿨다운
+    const now = Date.now();
+    if (now - lastEmailSentAtRef.current < 5 * 60 * 1000) {
+      setStatus('error');
+      setMessage('방금 보냈어. 5분 정도 기다렸다가 다시 시도해줘');
+      return;
+    }
+
+    setStatus('sending');
+    setMessage('메일 보내는 중…');
+
+    try {
+      const origin = window.location.origin;
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: trimmed,
+        options: {
+          emailRedirectTo: origin,
+        },
+      });
+
+      if (error) throw error;
+
+      lastEmailSentAtRef.current = now;
+      setStatus('sent');
+      setMessage('메일 보냈어! 메일함에서 로그인 링크를 눌러줘');
+
+      onToast?.('메일 보냈어. 메일함에서 로그인 링크를 눌러줘.');
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      setStatus('error');
+
+      if (msg.toLowerCase().includes('rate limit')) {
+        setMessage('너무 많이 눌렀어(전송 제한). 10분 정도 기다렸다가 다시 해줘');
+      } else {
+        setMessage(msg);
+      }
+    }
+  };
+
+  const pullOnce = async () => {
+    if (!userId) return;
+
+    try {
+      const cloudPayload = await pullFromCloud(userId);
+      if (!cloudPayload) return;
+
+      const localPayload = readLocalStoragePayload();
+
+      if (!shallowEqualPayload(localPayload, cloudPayload)) {
+        // 서버값으로 맞추고 새로고침(단, 무한루프 방지)
+        writeLocalStoragePayload(cloudPayload);
+
+        if (canAutoReloadNow()) {
+          markAutoReloadNow();
+          setMessage('회사/다른 기기 값으로 맞췄어. 새로고침 한 번 할게!');
+          onToast?.('다른 기기 값으로 맞췄어. 새로고침 할게!');
+          setTimeout(() => window.location.reload(), 600);
+        } else {
+          // 자동 새로고침이 막혀있거나(모바일/인앱브라우저) / 1시간 내 재실행이면
+          setMessage('다른 기기 값으로 맞췄어. 화면만 한번 새로고침하면 완벽해!');
+          onToast?.('다른 기기 값으로 맞췄어. 새로고침 한번 해줘!');
+        }
+      }
+    } catch (e: any) {
+      // ignore
+      console.error(e);
+    }
+  };
+
+  const pushOnce = async () => {
+    if (!userId) return;
+    try {
+      const payload = readLocalStoragePayload();
+      await pushToCloud(userId, payload);
+      // 너무 자주 토스트하면 방해라서 조용히
+    } catch (e: any) {
+      console.error(e);
+    }
+  };
+
+  // 자동 Pull
+  useEffect(() => {
+    if (!userId) return;
+    pullOnce();
+
+    const t = setInterval(() => {
+      pullOnce();
+    }, AUTO_PULL_INTERVAL_MS);
+
+    return () => clearInterval(t);
+  }, [userId]);
+
+  // 자동 Push
+  useEffect(() => {
+    if (!userId) return;
+
+    const t = setInterval(() => {
+      pushOnce();
+    }, AUTO_PUSH_INTERVAL_MS);
+
+    return () => clearInterval(t);
+  }, [userId]);
+
+  // 수동 저장
+  const manualSave = async () => {
+    if (!userId) {
+      onToast?.('먼저 로그인부터 해줘');
+      return;
+    }
+    try {
+      await pushOnce();
+      onToast?.('저장 완료! (클라우드에 업로드 됨)');
+    } catch {
+      onToast?.('저장 실패… 잠깐 뒤에 다시 해줘');
+    }
+  };
+
+  const currentDomain = useMemo(() => {
+    try {
+      return window.location.host;
     } catch {
       return '';
     }
   }, []);
 
-  const signIn = async () => {
-    if (!isSupabaseConfigured || !supabase) {
-      setMessage('동기화 설정이 아직 안 됐어. (Vercel에 Supabase 환경변수부터 넣어야 해)');
-      return;
-    }
-    if (!email.trim()) {
-      setMessage('이메일을 입력해줘.');
-      return;
-    }
-    if (loginCooldown) {
-      setMessage('로그인 메일을 너무 자주 보낼 수 없어. 1분 정도 뒤에 다시 눌러줘.');
-      return;
-    }
-    try {
-      setStatus('sending');
-      setMessage('');
-      // Supabase 메일 전송은 rate limit이 있어서, 실수로 연타해도 1분간은 막아둔다
-      setLoginCooldown(true);
-      setTimeout(() => setLoginCooldown(false), 60_000);
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: {
-          emailRedirectTo: origin,
-        },
-      });
-      if (error) throw error;
-      setStatus('waiting');
-      setMessage('이메일로 온 로그인 링크를 눌러줘. (같은 기기에서 메일을 열면 더 쉬움)');
-    } catch (e: any) {
-      console.error(e);
-      setStatus('error');
-      setMessage(e?.message || '로그인 메일 전송에 실패했어.');
-    }
-  };
-
-  const signOut = async () => {
-    if (!supabase) return;
-    await supabase.auth.signOut();
-    clearAutoReloadMark();
-    setStatus('idle');
-    setMessage('로그아웃 됐어.');
-  };
-
-  // 1) 로그인 되면: 클라우드에서 한번 내려받기(회사에서 입력한 값 -> 이 기기로)
-  useEffect(() => {
-    if (loading) return;
-    if (!user) return;
-    if (!supabase) return;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        setStatus('syncing');
-        setMessage('동기화 불러오는 중...');
-
-        const cloudPayload = await pullFromCloud(user.id);
-        if (cancelled) return;
-
-        if (cloudPayload && Object.keys(cloudPayload).length > 0) {
-          // 클라우드 값으로 로컬 저장을 덮어쓰기 (바뀐 게 있을 때만)
-          const localBefore = readLocalStoragePayload();
-          const isSame = Object.keys(cloudPayload).every((k) => localBefore[k] === cloudPayload[k]);
-          if (!isSame) {
-            writeLocalStoragePayload(cloudPayload);
-          }
-          // 컴포넌트들이 localStorage에서 초기값을 읽는 구조라, 새로고침이 필요할 수 있음
-// 하지만 계속 새로고침되면 사용이 불가하니 "1시간에 1번"으로 제한한다.
-if (!isSame && canAutoReloadNow()) {
-  markAutoReloadNow();
-  setMessage('회사/다른 기기 값으로 맞췄어. 새로고침 한 번 할게!');
-  setTimeout(() => window.location.reload(), 600);
-  return;
-} else {
-  setMessage(isSame ? '동기화 확인 완료.' : '회사/다른 기기 값으로 맞췄어. (자동 새로고침은 1시간에 1번만 할게)');
-}
-}
-
-        // 처음 로그인인데 클라우드에 데이터가 없으면: 현재 로컬 값을 올려서 "기준"을 만든다
-        const localPayload = readLocalStoragePayload();
-        await pushToCloud(user.id, localPayload);
-        lastPushedRef.current = JSON.stringify(localPayload);
-        setLastSyncText(new Date().toLocaleString());
-        setStatus('ready');
-        setMessage('동기화 ON (회사/집/폰에서 같은 값이 보여)');
-      } catch (e: any) {
-        console.error(e);
-        setStatus('error');
-        setMessage(e?.message || '동기화 초기화에 실패했어.');
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user, loading]);
-// 1-b) 로그인 상태에서: 1시간마다 "다른 기기에서 바뀐 값"이 있는지 확인하기
-useEffect(() => {
-  if (!user) return;
-  if (status === 'error') return;
-  if (!supabase) return;
-
-  const timer = setInterval(async () => {
-    try {
-      const cloudPayload = await pullFromCloud(user.id);
-      if (!cloudPayload || Object.keys(cloudPayload).length === 0) return;
-
-      // cloudPayload에 있는 키들만 비교 (로컬에 다른 키가 더 있어도 OK)
-      const localPayload = readLocalStoragePayload();
-      const isSame = Object.keys(cloudPayload).every((k) => localPayload[k] === cloudPayload[k]);
-      if (isSame) return;
-
-      // 다른 기기에서 변경된 값 발견 → 로컬 덮어쓰기
-      writeLocalStoragePayload(cloudPayload);
-
-      // 화면 반영을 위해 새로고침이 필요할 수 있음(하지만 1시간에 1번으로 제한)
-      if (canAutoReloadNow()) {
-        markAutoReloadNow();
-        setMessage('다른 기기에서 값이 바뀌었어. 새로고침 한 번 할게!');
-        setTimeout(() => window.location.reload(), 600);
-      } else {
-        setMessage('다른 기기에서 값이 바뀌었어. (자동 새로고침은 1시간에 1번만 해)');
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }, AUTO_RELOAD_INTERVAL_MS);
-
-  return () => clearInterval(timer);
-}, [user, status]);
-
-
-  // 2) 로그인 상태에서: 주기적으로 "변경된 값"을 클라우드로 올리기
-  useEffect(() => {
-    if (!user) return;
-    if (status === 'error') return;
-    if (!supabase) return;
-
-    const timer = setInterval(async () => {
-      try {
-        // 이미 업로드 중이면 중복 호출 방지
-        if (pushingRef.current) return;
-
-        const payload = readLocalStoragePayload();
-        const json = JSON.stringify(payload);
-        if (json === lastPushedRef.current) return;
-
-        // 입력 중(커서가 인풋에 있을 때)에는 너무 자주 업로드하지 않도록 한 템포 늦춘다
-        const active = document.activeElement as HTMLElement | null;
-        const isTyping = !!active && ['INPUT', 'TEXTAREA'].includes(active.tagName);
-        if (isTyping) return;
-
-        pushingRef.current = true;
-        await pushToCloud(user.id, payload);
-        lastPushedRef.current = json;
-        setLastSyncText(new Date().toLocaleString());
-        if (status !== 'ready') setStatus('ready');
-      } catch (e) {
-        // 일시적인 네트워크 오류는 그냥 무시(다음 주기에 재시도)
-        console.error(e);
-      } finally {
-        pushingRef.current = false;
-      }
-    }, 20000);
-
-    return () => clearInterval(timer);
-  }, [user, status]);
-
   return (
-    <Card className="mb-4 p-4 bg-white/80 backdrop-blur shadow-md rounded-xl">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0">
-          <div className="font-semibold">동기화</div>
-          <div className="text-sm text-gray-600 break-words">
-            {!isSupabaseConfigured
-              ? '동기화: 설정 필요 (Supabase URL/KEY를 Vercel에 등록해야 함)'
-              : loading
-              ? '확인 중...'
-              : user
-                ? `로그인됨: ${user.email ?? ''}`
-                : '로그인하면 회사/집/폰에서 값이 같아져.'}
-          </div>
-          {message && <div className="text-sm mt-1 text-gray-700">{message}</div>}
-          {lastSyncText && <div className="text-xs mt-1 text-gray-500">마지막 동기화: {lastSyncText}</div>}
-        </div>
+    <div className="p-4 rounded-2xl border bg-white shadow-sm">
+      <div className="font-semibold mb-1">동기화</div>
+      <div className="text-sm text-gray-600 mb-3">
+        로그인하면 회사/집/폰에서 값이 같아져.
+        <span className="block text-xs text-gray-400 mt-1">현재 접속 도메인: {currentDomain}</span>
+        <span className="block text-xs text-gray-400">메일 링크가 안 열리면: 메일앱/카톡 내장 브라우저 말고 Safari(또는 크롬)로 열어줘</span>
+      </div>
 
-        {!user ? (
-          <div className="flex flex-col gap-2 md:flex-row md:items-center">
-            <Input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="이메일 입력 (예: abc@gmail.com)"
-              className="w-full md:w-[260px]"
-              type="email"
-            />
-            <Button onClick={signIn} disabled={status === 'sending' || loginCooldown}>
-              {status === 'sending' ? '보내는 중...' : loginCooldown ? '잠시 후 다시' : '로그인 링크 받기'}
-            </Button>
-          </div>
+      <div className="flex gap-2 items-center flex-wrap">
+        <Input
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="이메일"
+          className="w-full sm:w-64"
+        />
+        <Button onClick={sendMagicLink} disabled={status === 'sending'}>
+          로그인 링크 받기
+        </Button>
+
+        <Button variant="outline" onClick={manualSave} disabled={!userId}>
+          저장
+        </Button>
+      </div>
+
+      <div className="mt-2 text-sm">
+        {status === 'error' ? (
+          <span className="text-red-600">{message}</span>
         ) : (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={signOut}>
-              로그아웃
-            </Button>
-          </div>
+          <span className="text-gray-700">{message}</span>
         )}
       </div>
-    </Card>
+
+      <div className="mt-2 text-xs text-gray-400">
+        자동 동기화: 서버 확인 30초 / 자동 업로드 2분
+        {autoReloadDisabled && (
+          <span className="block text-amber-700 mt-1">* 이 기기(브라우저)는 저장소가 제한돼서 자동 새로고침을 껐어. 필요한 경우 직접 새로고침만 해줘.</span>
+        )}
+      </div>
+    </div>
   );
 }

@@ -1,284 +1,146 @@
-import { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { useMemo } from 'react';
 import { Card } from './ui/card';
-import { Input } from './ui/input';
-import { LineChart as LineChartIcon, TrendingUp, TrendingDown } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
-interface MonthData {
-  month: number;
-  previousMonthAsset: number; // 이전달 자산
+interface MonthlyData {
+  month: string;
+  budgetBalance: number;
+  bankAsset: number;
+  stockAssetOjunseok: number;
+  currentAsset: number;
 }
 
-interface AssetTrendData {
-  months: Record<number, MonthData>;
-}
+const readJson = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+};
+
+const toNumber = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
 export function AssetTrend() {
-  const [data, setData] = useState<AssetTrendData>(() => {
-    const saved = localStorage.getItem('assetTrend');
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return {
-      months: {},
-    };
-  });
+  const data = useMemo(() => {
+    const getMonthlyData = (): MonthlyData[] => {
+      const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 
-  useEffect(() => {
-    localStorage.setItem('assetTrend', JSON.stringify(data));
-  }, [data]);
+      // ✅ 통장/저축
+      const bankData = readJson<any>('bankAccounts', null);
+      const bankAccounts = bankData?.accounts || [];
+      const savings = bankData?.savings || [];
+      const bankAsset = [...bankAccounts, ...savings].reduce((sum, item) => sum + toNumber(item.amount), 0);
 
-  const updateMonthData = (month: number, previousMonthAsset: number) => {
-    setData({
-      ...data,
-      months: {
-        ...data.months,
-        [month]: {
-          month,
-          previousMonthAsset,
-        },
-      },
-    });
-  };
+      // ✅ 주식(오준석 계좌만)
+      const stockPortfolio = readJson<any>('stockPortfolio', null);
+      const exchangeRate = toNumber(localStorage.getItem('stockExchangeRate')) || toNumber(stockPortfolio?.exchangeRate) || 0;
+      const stockAccounts = stockPortfolio?.accounts || [];
 
-  // 월별 데이터 가져오기
-  const getMonthlyData = () => {
-    const monthlyAssets = [];
-    const monthlyExpenses = [];
-    
-    for (let month = 1; month <= 12; month++) {
-      // 지출 관리 잔액 가져오기
-      const budgetKey = `monthlyBudget_${month}`;
-      const savedBudget = localStorage.getItem(budgetKey);
-      let budgetBalance = 0;
-      
-      if (savedBudget) {
-        const budgetData = JSON.parse(savedBudget);
-        const salary = budgetData.salary || 0;
-        const income = budgetData.income?.reduce((sum: number, item: any) => {
-          if (item.subItems && item.subItems.length > 0) {
-            return sum + item.subItems.reduce((subSum: number, sub: any) => subSum + (sub.amount || 0), 0);
-          }
-          return sum + (item.amount || 0);
-        }, 0) || 0;
-        const fixedCosts = budgetData.fixedCosts?.reduce((sum: number, item: any) => {
-          if (item.subItems && item.subItems.length > 0) {
-            return sum + item.subItems.reduce((subSum: number, sub: any) => subSum + (sub.amount || 0), 0);
-          }
-          return sum + (item.amount || 0);
-        }, 0) || 0;
-        const livingExpenses = budgetData.livingExpenses?.reduce((sum: number, item: any) => {
-          if (item.subItems && item.subItems.length > 0) {
-            return sum + item.subItems.reduce((subSum: number, sub: any) => subSum + (sub.amount || 0), 0);
-          }
-          return sum + (item.amount || 0);
-        }, 0) || 0;
-        const accountExpenses = budgetData.accountExpenses?.reduce((sum: number, item: any) => {
-          if (item.subItems && item.subItems.length > 0) {
-            return sum + item.subItems.reduce((subSum: number, sub: any) => subSum + (sub.amount || 0), 0);
-          }
-          return sum + (item.amount || 0);
-        }, 0) || 0;
-        
-        const totalIncome = salary + income;
-        const totalExpense = fixedCosts + livingExpenses + accountExpenses;
-        budgetBalance = totalIncome - totalExpense;
-      }
-
-      // 통장 자산 가져오기
-      const bankKey = `bankAccounts`;
-      const savedBank = localStorage.getItem(bankKey);
-      let bankAsset = 0;
-      
-      if (savedBank) {
-        const bankData = JSON.parse(savedBank);
-        const accountsBalance = bankData.accounts?.reduce((sum: number, acc: any) => sum + (acc.balance || 0), 0) || 0;
-        const savingsBalance = bankData.savingsAccounts?.reduce((sum: number, acc: any) => {
-          return sum + (acc.deposits?.reduce((depSum: number, dep: any) => depSum + (dep.amount * dep.count || 0), 0) || 0);
-        }, 0) || 0;
-        
-        bankAsset = accountsBalance + savingsBalance;
-      }
-
-      // 현재 자산 = (지출관리)잔액 + (통장)총 자산
-      const currentAsset = budgetBalance + bankAsset;
-
-      // 이전달 자산 = 전월의 현재 자산
-      let previousMonthAsset = 0;
-      if (month > 1) {
-        const prevMonthIndex = monthlyAssets.length - 1;
-        if (prevMonthIndex >= 0) {
-          previousMonthAsset = monthlyAssets[prevMonthIndex].현재자산;
-        }
-      }
-
-      // 손익 = 현재 자산 - 이전달 자산
-      const profitLoss = currentAsset - previousMonthAsset;
-
-      monthlyAssets.push({
-        month: `${month}월`,
-        monthNumber: month,
-        현재자산: currentAsset,
-        이전달자산: previousMonthAsset,
-        손익: profitLoss,
+      const findOjunseokAccount = stockAccounts.find((a: any) => {
+        const name = String(a?.name || '').trim();
+        return name === '오준석' || name.includes('오준석');
       });
 
-      // 지출 데이터도 저장
-      if (savedBudget) {
-        const budgetData = JSON.parse(savedBudget);
-        const fixedCosts = budgetData.fixedCosts?.reduce((sum: number, item: any) => {
-          if (item.subItems && item.subItems.length > 0) {
-            return sum + item.subItems.reduce((subSum: number, sub: any) => subSum + (sub.amount || 0), 0);
-          }
-          return sum + (item.amount || 0);
-        }, 0) || 0;
-        const livingExpenses = budgetData.livingExpenses?.reduce((sum: number, item: any) => {
-          if (item.subItems && item.subItems.length > 0) {
-            return sum + item.subItems.reduce((subSum: number, sub: any) => subSum + (sub.amount || 0), 0);
-          }
-          return sum + (item.amount || 0);
-        }, 0) || 0;
-        const accountExpenses = budgetData.accountExpenses?.reduce((sum: number, item: any) => {
-          if (item.subItems && item.subItems.length > 0) {
-            return sum + item.subItems.reduce((subSum: number, sub: any) => subSum + (sub.amount || 0), 0);
-          }
-          return sum + (item.amount || 0);
-        }, 0) || 0;
-        
-        const totalExpense = fixedCosts + livingExpenses + accountExpenses;
-        monthlyExpenses.push({
-          month: `${month}월`,
-          monthNumber: month,
-          지출: totalExpense,
-        });
-      } else {
-        monthlyExpenses.push({
-          month: `${month}월`,
-          monthNumber: month,
-          지출: 0,
-        });
-      }
-    }
+      const stockAssetOjunseok = (findOjunseokAccount?.stocks || []).reduce((sum: number, s: any) => {
+        const qty = toNumber(s?.quantity);
+        const currentPrice = toNumber(s?.currentPrice);
+        const currentValue = qty * currentPrice;
+        const cur = String(s?.currency || 'USD');
+        const currentValueKRW = cur === 'USD' ? currentValue * exchangeRate : currentValue;
+        return sum + currentValueKRW;
+      }, 0);
 
-    return { monthlyAssets, monthlyExpenses };
-  };
+      return months.map((month, index) => {
+        // ✅ 가계부 잔액: 총수입 - 총지출 (MonthlyBudget에서 계산된 값)
+        const budgetData = readJson<any>(`monthlyBudget_${index + 1}`, null);
+        const budgetBalance = toNumber(budgetData?.remainingSalary ?? budgetData?.balance ?? 0);
 
-  const { monthlyAssets, monthlyExpenses } = getMonthlyData();
+        // ✅ 현재 자산 = 해당 월 잔액 + '오준석' 주식 총 평가금액 + 통장 총 자산
+        const currentAsset = budgetBalance + stockAssetOjunseok + bankAsset;
 
-  // 연간 총 손익 계산
-  const yearlyProfitLoss = monthlyAssets.reduce((sum, data) => sum + data.손익, 0);
+        return {
+          month,
+          budgetBalance,
+          bankAsset,
+          stockAssetOjunseok,
+          currentAsset,
+        };
+      });
+    };
 
-  const months = [
-    { value: 1, label: '1월' },
-    { value: 2, label: '2월' },
-    { value: 3, label: '3월' },
-    { value: 4, label: '4월' },
-    { value: 5, label: '5월' },
-    { value: 6, label: '6월' },
-    { value: 7, label: '7월' },
-    { value: 8, label: '8월' },
-    { value: 9, label: '9월' },
-    { value: 10, label: '10월' },
-    { value: 11, label: '11월' },
-    { value: 12, label: '12월' },
-  ];
+    return getMonthlyData();
+  }, []);
+
+  const formatKRW = (value: number) => Math.round(value).toLocaleString();
 
   return (
-    <div className="space-y-4 p-4 md:p-6 max-w-7xl mx-auto">
-      <div className="flex items-center gap-3 mb-2">
-        <LineChartIcon className="w-8 h-8 text-rose-600" />
-        <h1 className="text-2xl">자산 추이 분석</h1>
+    <Card className="p-6 bg-white shadow-md rounded-2xl border">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl">자산 추이</h2>
+        <div className="text-sm text-gray-500">
+          현재 자산 = 월 잔액 + 오준석 주식 평가금액 + 통장 자산
+        </div>
       </div>
 
-      {/* 연간 총 손익 */}
-      <Card className="p-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-xl">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl">연간 총 손익</h2>
-          <div className="flex items-center gap-2">
-            {yearlyProfitLoss >= 0 ? (
-              <TrendingUp className="w-8 h-8 text-yellow-300" />
-            ) : (
-              <TrendingDown className="w-8 h-8 text-red-300" />
-            )}
-            <span className={`text-4xl font-bold ${yearlyProfitLoss >= 0 ? 'text-yellow-300' : 'text-red-300'}`}>
-              {yearlyProfitLoss.toLocaleString()}원
-            </span>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="p-4 bg-blue-50 rounded-xl border">
+          <div className="text-sm text-gray-600">통장 총 자산</div>
+          <div className="text-2xl font-bold text-blue-600">₩ {formatKRW(data[0]?.bankAsset || 0)}</div>
         </div>
-      </Card>
-
-      {/* 월별 손익 테이블 */}
-      <Card className="p-6 bg-gradient-to-br from-purple-50 to-purple-100 shadow-md">
-        <h2 className="text-2xl mb-4 text-purple-900">월별 손익 내역</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-purple-300">
-                <th className="p-3 text-left">월</th>
-                <th className="p-3 text-right">이전달 자산</th>
-                <th className="p-3 text-right">현재 자산</th>
-                <th className="p-3 text-right">손익</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthlyAssets.map((asset) => (
-                <tr key={asset.monthNumber} className="border-b border-purple-200 hover:bg-purple-50">
-                  <td className="p-3">{asset.month}</td>
-                  <td className="p-3 text-right">{asset.이전달자산.toLocaleString()}원</td>
-                  <td className="p-3 text-right font-semibold">{asset.현재자산.toLocaleString()}원</td>
-                  <td className={`p-3 text-right font-bold ${asset.손익 >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {asset.손익.toLocaleString()}원
-                  </td>
-                </tr>
-              ))}
-              <tr className="bg-purple-200 font-bold">
-                <td className="p-3" colSpan={3}>총 손익</td>
-                <td className={`p-3 text-right text-lg ${yearlyProfitLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {yearlyProfitLoss.toLocaleString()}원
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="p-4 bg-emerald-50 rounded-xl border">
+          <div className="text-sm text-gray-600">오준석 주식 평가금액</div>
+          <div className="text-2xl font-bold text-emerald-700">₩ {formatKRW(data[0]?.stockAssetOjunseok || 0)}</div>
         </div>
-      </Card>
+        <div className="p-4 bg-purple-50 rounded-xl border">
+          <div className="text-sm text-gray-600">이번 달 잔액</div>
+          <div className="text-2xl font-bold text-purple-600">₩ {formatKRW(data[0]?.budgetBalance || 0)}</div>
+        </div>
+        <div className="p-4 bg-orange-50 rounded-xl border">
+          <div className="text-sm text-gray-600">현재 자산</div>
+          <div className="text-2xl font-bold text-orange-600">₩ {formatKRW(data[0]?.currentAsset || 0)}</div>
+        </div>
+      </div>
 
-      {/* 월별 소비 사용량 그래프 */}
-      <Card className="p-6 bg-white shadow-md">
-        <h2 className="text-2xl mb-4">월별 소비 사용량</h2>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={monthlyExpenses}>
-            <CartesianGrid strokeDasharray="3 3" />
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
             <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip 
-              formatter={(value: number) => value.toLocaleString() + '원'}
-              labelStyle={{ color: '#000' }}
+            <YAxis tickFormatter={formatKRW} />
+            <Tooltip
+              formatter={(value: any, name: any) => [
+                `₩ ${formatKRW(Number(value))}`,
+                name === 'currentAsset'
+                  ? '현재 자산'
+                  : name === 'budgetBalance'
+                    ? '월 잔액'
+                    : name === 'stockAssetOjunseok'
+                      ? '오준석 주식'
+                      : '통장 자산',
+              ]}
             />
-            <Legend />
-            <Bar dataKey="지출" fill="#f59e0b" />
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
-
-      {/* 월별 자산 유동성 그래프 */}
-      <Card className="p-6 bg-white shadow-md">
-        <h2 className="text-2xl mb-4">월별 전체 자산 유동성</h2>
-        <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={monthlyAssets}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip 
-              formatter={(value: number) => value.toLocaleString() + '원'}
-              labelStyle={{ color: '#000' }}
-            />
-            <Legend />
-            <Line type="monotone" dataKey="현재자산" stroke="#3b82f6" strokeWidth={3} />
-            <Line type="monotone" dataKey="이전달자산" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" />
-            <Line type="monotone" dataKey="손익" stroke="#10b981" strokeWidth={2} />
+            <Line type="monotone" dataKey="currentAsset" strokeWidth={3} dot={{ r: 4 }} />
+            <Line type="monotone" dataKey="budgetBalance" strokeDasharray="5 5" dot={{ r: 3 }} />
+            <Line type="monotone" dataKey="stockAssetOjunseok" strokeDasharray="3 3" dot={{ r: 3 }} />
           </LineChart>
         </ResponsiveContainer>
-      </Card>
-    </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div className="p-3 bg-gray-50 rounded-lg border">
+          <div className="font-semibold">💡 참고</div>
+          <div className="text-gray-600 mt-1">통장/저축은 고정값(현재 시점) 기준으로 계산돼요.</div>
+        </div>
+        <div className="p-3 bg-gray-50 rounded-lg border">
+          <div className="font-semibold">📈 주식</div>
+          <div className="text-gray-600 mt-1">'오준석' 계좌 이름이 포함된 계좌의 평가금액만 반영돼요.</div>
+        </div>
+        <div className="p-3 bg-gray-50 rounded-lg border">
+          <div className="font-semibold">🧾 월 잔액</div>
+          <div className="text-gray-600 mt-1">가계부의 “잔액(총수입-총지출)” 값을 사용해요.</div>
+        </div>
+      </div>
+    </Card>
   );
 }
