@@ -182,18 +182,18 @@ export function BankAccounts() {
   return (
     <div className="space-y-4 p-4 md:p-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-2">
-        <Landmark className="w-8 h-8 text-blue-600" />
+        <Landmark className="w-8 h-8 text-sky-500" />
         <h1 className="text-2xl">통장 정리</h1>
       </div>
 
       {/* 일반 계좌 */}
-      <Card className="p-4 bg-gradient-to-br from-cyan-50 to-blue-100 border-blue-200 shadow-md">
+      <Card className="p-4 bg-gradient-to-br from-sky-50 to-sky-100 border-sky-200 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Landmark className="w-5 h-5 text-cyan-600" />
-            <h2 className="text-xl text-cyan-900">일반 계좌</h2>
+            <Landmark className="w-5 h-5 text-sky-500" />
+            <h2 className="text-xl text-slate-800">일반 계좌</h2>
           </div>
-          <Button onClick={addAccount} size="sm" className="bg-cyan-600 hover:bg-cyan-700">
+          <Button onClick={addAccount} size="sm" className="bg-sky-200 hover:bg-sky-300 text-slate-900 border border-sky-200">
             <Plus className="w-4 h-4 mr-1" />
             계좌 추가
           </Button>
@@ -225,12 +225,12 @@ export function BankAccounts() {
                 />
                 <span className="text-sm font-semibold min-w-[100px] text-right">{account.balance.toLocaleString()}원</span>
                 <Button size="sm" variant="ghost" onClick={() => deleteAccount(account.id)}>
-                  <Trash2 className="w-4 h-4 text-red-600" />
+                  <Trash2 className="w-4 h-4 text-rose-500" />
                 </Button>
               </div>
             ))}
-            <div className="flex justify-end pt-2 border-t-2 border-cyan-400">
-              <div className="text-lg font-bold text-cyan-700">
+            <div className="flex justify-end pt-2 border-t-2 border-sky-200">
+              <div className="text-lg font-bold text-slate-800">
                 총 잔액: {totalAccountBalance.toLocaleString()}원
               </div>
             </div>
@@ -239,13 +239,13 @@ export function BankAccounts() {
       </Card>
 
       {/* 정기 적금 */}
-      <Card className="p-4 bg-gradient-to-br from-amber-50 to-yellow-100 border-amber-200 shadow-md">
+      <Card className="p-4 bg-gradient-to-br from-amber-50 to-yellow-100 border-amber-200 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <PiggyBank className="w-5 h-5 text-amber-600" />
-            <h2 className="text-xl text-amber-900">정기 적금</h2>
+            <PiggyBank className="w-5 h-5 text-amber-500" />
+            <h2 className="text-xl text-slate-800">정기 적금</h2>
           </div>
-          <Button onClick={addSavingsAccount} size="sm" className="bg-amber-600 hover:bg-amber-700">
+          <Button onClick={addSavingsAccount} size="sm" className="bg-amber-200 hover:bg-amber-300 text-slate-900 border border-amber-200">
             <Plus className="w-4 h-4 mr-1" />
             적금 추가
           </Button>
@@ -303,7 +303,7 @@ export function BankAccounts() {
                       variant="ghost"
                       onClick={() => deleteSavingsAccount(savings.id)}
                     >
-                      <Trash2 className="w-4 h-4 text-red-600" />
+                      <Trash2 className="w-4 h-4 text-rose-500" />
                     </Button>
                   </div>
 
@@ -343,7 +343,7 @@ export function BankAccounts() {
                           variant="ghost"
                           onClick={() => deleteDepositOption(savings.id, idx)}
                         >
-                          <Trash2 className="w-4 h-4 text-red-600" />
+                          <Trash2 className="w-4 h-4 text-rose-500" />
                         </Button>
                       </div>
                     ))}
@@ -377,8 +377,8 @@ export function BankAccounts() {
         )}
 
         {data.savingsAccounts.length > 0 && (
-          <div className="flex justify-end pt-4 border-t-2 border-amber-400 mt-4">
-            <div className="text-lg font-bold text-amber-700">
+          <div className="flex justify-end pt-4 border-t-2 border-amber-200 mt-4">
+            <div className="text-lg font-bold text-slate-800">
               총 적금 잔액: {totalSavingsBalance.toLocaleString()}원
             </div>
           </div>
@@ -386,23 +386,23 @@ export function BankAccounts() {
       </Card>
 
       {/* 전체 요약 */}
-      <Card className="p-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-xl">
+      <Card className="p-6 bg-gradient-to-r from-emerald-100 to-sky-100 text-slate-900 shadow-sm border border-emerald-200/60">
         <div className="flex items-center gap-2 mb-4">
           <PiggyBank className="w-6 h-6" />
           <h2 className="text-2xl">전체 자산 요약</h2>
         </div>
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <div className="text-sm opacity-90">일반 계좌 총액</div>
+            <div className="text-sm text-slate-600">일반 계좌 총액</div>
             <div className="text-xl font-bold">{totalAccountBalance.toLocaleString()}원</div>
           </div>
           <div>
-            <div className="text-sm opacity-90">적금 총액</div>
+            <div className="text-sm text-slate-600">적금 총액</div>
             <div className="text-xl font-bold">{totalSavingsBalance.toLocaleString()}원</div>
           </div>
           <div>
-            <div className="text-sm opacity-90">총 자산</div>
-            <div className="text-3xl font-bold text-yellow-300">
+            <div className="text-sm text-slate-600">총 자산</div>
+            <div className="text-3xl font-bold text-emerald-700/80">
               {(totalAccountBalance + totalSavingsBalance).toLocaleString()}원
             </div>
           </div>

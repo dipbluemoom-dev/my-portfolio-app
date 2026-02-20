@@ -8,8 +8,9 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: #030213;
-  --primary-foreground: oklch(1 0 0);
+  /* ✅ 파스텔 톤(눈 편한 기본 컬러) */
+  --primary: #a5b4fc; /* indigo-300 */
+  --primary-foreground: #0f172a; /* slate-900 */
   --secondary: oklch(0.95 0.0058 264.53);
   --secondary-foreground: #030213;
   --muted: #ececf0;

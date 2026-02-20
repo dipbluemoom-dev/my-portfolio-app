@@ -155,21 +155,21 @@ export function AssetTrend() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="p-4 bg-blue-50 rounded-xl border">
+        <div className="p-4 bg-sky-50 rounded-xl border">
           <div className="text-sm text-gray-600">통장 총 자산</div>
-          <div className="text-2xl font-bold text-blue-600">₩ {formatKRW(current?.bankAsset || 0)}</div>
+          <div className="text-2xl font-bold text-sky-600/80">₩ {formatKRW(current?.bankAsset || 0)}</div>
         </div>
         <div className="p-4 bg-emerald-50 rounded-xl border">
           <div className="text-sm text-gray-600">오준석 주식 평가금액</div>
-          <div className="text-2xl font-bold text-emerald-700">₩ {formatKRW(current?.stockAssetOjunseok || 0)}</div>
+          <div className="text-2xl font-bold text-emerald-700/80">₩ {formatKRW(current?.stockAssetOjunseok || 0)}</div>
         </div>
-        <div className="p-4 bg-purple-50 rounded-xl border">
+        <div className="p-4 bg-violet-50 rounded-xl border">
           <div className="text-sm text-gray-600">이번 달 잔액</div>
-          <div className="text-2xl font-bold text-purple-600">₩ {formatKRW(current?.budgetBalance || 0)}</div>
+          <div className="text-2xl font-bold text-violet-600/80">₩ {formatKRW(current?.budgetBalance || 0)}</div>
         </div>
-        <div className="p-4 bg-orange-50 rounded-xl border">
+        <div className="p-4 bg-amber-50 rounded-xl border">
           <div className="text-sm text-gray-600">현재 자산</div>
-          <div className="text-2xl font-bold text-orange-600">₩ {formatKRW(current?.currentAsset || 0)}</div>
+          <div className="text-2xl font-bold text-amber-700/80">₩ {formatKRW(current?.currentAsset || 0)}</div>
         </div>
       </div>
 
@@ -190,9 +190,9 @@ export function AssetTrend() {
                       : '통장 자산',
               ]}
             />
-            <Line type="monotone" dataKey="currentAsset" strokeWidth={3} dot={{ r: 4 }} />
-            <Line type="monotone" dataKey="budgetBalance" strokeDasharray="5 5" dot={{ r: 3 }} />
-            <Line type="monotone" dataKey="stockAssetOjunseok" strokeDasharray="3 3" dot={{ r: 3 }} />
+            <Line type="monotone" dataKey="currentAsset" stroke="#a5b4fc" strokeWidth={3} dot={{ r: 4 }} />
+            <Line type="monotone" dataKey="budgetBalance" stroke="#c4b5fd" strokeDasharray="5 5" dot={{ r: 3 }} />
+            <Line type="monotone" dataKey="stockAssetOjunseok" stroke="#6ee7b7" strokeDasharray="3 3" dot={{ r: 3 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>

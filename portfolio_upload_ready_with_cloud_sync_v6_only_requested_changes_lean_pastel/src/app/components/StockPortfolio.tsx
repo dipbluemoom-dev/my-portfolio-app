@@ -457,24 +457,25 @@ export function StockPortfolio() {
     );
   };
 
+  // ✅ 파스텔 톤(눈 편한) 차트 컬러
   const COLORS = [
-    '#3b82f6',
-    '#10b981',
-    '#f59e0b',
-    '#ef4444',
-    '#8b5cf6',
-    '#06b6d4',
-    '#f97316',
-    '#22c55e',
-    '#ec4899',
-    '#64748b',
-    '#14b8a6',
-    '#eab308',
+    '#7dd3fc', // sky-300
+    '#6ee7b7', // emerald-300
+    '#fde68a', // amber-200
+    '#fda4af', // rose-300
+    '#c4b5fd', // violet-300
+    '#67e8f9', // cyan-300
+    '#fdba74', // orange-300
+    '#bef264', // lime-300
+    '#f9a8d4', // pink-300
+    '#cbd5e1', // slate-300
+    '#5eead4', // teal-300
+    '#fecaca', // red-200
   ];
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3">
-        <TrendingUp className="w-8 h-8 text-emerald-600" />
+        <TrendingUp className="w-8 h-8 text-rose-400" />
         <h1 className="text-2xl">주식 포트폴리오</h1>
       </div>
 
@@ -482,7 +483,7 @@ export function StockPortfolio() {
       <Card className="p-4 bg-white shadow-md rounded-xl border">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-emerald-600" />
+            <DollarSign className="w-5 h-5 text-slate-600" />
             <span className="font-semibold">원/달러 환율</span>
           </div>
           <div className="flex items-center gap-2">
@@ -511,7 +512,7 @@ export function StockPortfolio() {
               <div className="text-3xl font-bold mt-1">₩ {fmt0(totalAssetsKRW)}</div>
             </div>
             <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-              <Wallet className="w-5 h-5 text-blue-600" />
+              <Wallet className="w-5 h-5 text-sky-500" />
             </div>
           </div>
         </Card>
@@ -528,7 +529,7 @@ export function StockPortfolio() {
                   <div className="mt-2 text-xs text-gray-500">계좌명: {account.name}</div>
                 </div>
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-                  <CreditCard className="w-5 h-5 text-emerald-600" />
+                  <CreditCard className="w-5 h-5 text-violet-400" />
                 </div>
               </div>
             </Card>
@@ -553,7 +554,7 @@ export function StockPortfolio() {
                     variant="outline"
                     size="sm"
                     onClick={() => deleteAccount(account.id)}
-                    className="text-red-600"
+                    className="text-rose-600"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     계좌 삭제
@@ -666,7 +667,7 @@ export function StockPortfolio() {
                         </td>
 
                         <td className="p-2 text-center font-medium">
-                          <span className={metrics.targetProfitLossPercent >= 0 ? 'text-green-600' : 'text-red-600'}>
+                          <span className={metrics.targetProfitLossPercent >= 0 ? 'text-rose-500/80' : 'text-sky-600/80'}>
                             {fmtPct(metrics.targetProfitLossPercent)}
                           </span>
                         </td>
@@ -680,7 +681,7 @@ export function StockPortfolio() {
                         </td>
 
                         <td className="p-2 text-right">
-                          <div className={metrics.profitLoss >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                          <div className={metrics.profitLoss >= 0 ? 'text-rose-500/80 font-semibold' : 'text-sky-600/80 font-semibold'}>
                             {isUSD ? '$ ' + fmt2(metrics.profitLoss) : '₩ ' + fmt0(metrics.profitLoss)}
                           </div>
                           {isUSD && (
@@ -688,7 +689,7 @@ export function StockPortfolio() {
                           )}
                         </td>
 
-                        <td className={`p-2 text-right font-bold ${metrics.profitLossPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <td className={`p-2 text-right font-bold ${metrics.profitLossPercent >= 0 ? 'text-rose-500/80' : 'text-sky-600/80'}`}>
                           {fmtPct(metrics.profitLossPercent)}
                         </td>
 
@@ -697,7 +698,7 @@ export function StockPortfolio() {
                             variant="ghost"
                             size="sm"
                             onClick={() => deleteStock(account.id, stock.id)}
-                            className="text-red-500 hover:text-red-700"
+                            className="text-rose-500 hover:text-rose-600"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -798,7 +799,7 @@ export function StockPortfolio() {
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => deleteBuyRecord(account.id, stock.id, record.id)}
-                                      className="text-red-500"
+                                      className="text-rose-500 hover:text-rose-600"
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </Button>
@@ -886,7 +887,7 @@ export function StockPortfolio() {
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => deleteSellRecord(account.id, stock.id, record.id)}
-                                      className="text-red-500"
+                                      className="text-rose-500 hover:text-rose-600"
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </Button>
@@ -1006,14 +1007,14 @@ export function StockPortfolio() {
                       </div>
                       <div className="p-2 rounded-lg bg-white border">
                         <div className="text-xs text-gray-500">손익(원)</div>
-                        <div className={"font-bold " + (g.profitLossKRW >= 0 ? 'text-green-600' : 'text-red-600')}
+                        <div className={"font-bold " + (g.profitLossKRW >= 0 ? 'text-rose-500/80' : 'text-sky-600/80')}
                         >
                           {fmt0(g.profitLossKRW)}
                         </div>
                       </div>
                       <div className="p-2 rounded-lg bg-white border">
                         <div className="text-xs text-gray-500">손익률</div>
-                        <div className={"font-bold " + (g.profitLossPct >= 0 ? 'text-green-600' : 'text-red-600')}
+                        <div className={"font-bold " + (g.profitLossPct >= 0 ? 'text-rose-500/80' : 'text-sky-600/80')}
                         >
                           {fmtPct(g.profitLossPct)}
                         </div>

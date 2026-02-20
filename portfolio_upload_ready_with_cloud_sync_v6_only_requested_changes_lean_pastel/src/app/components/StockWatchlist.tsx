@@ -206,7 +206,7 @@ export function StockWatchlist() {
                         onClick={() => deleteStock(tier, stock.id)}
                         className="w-full"
                       >
-                        <Trash2 className="w-4 h-4 text-red-600" />
+                        <Trash2 className="w-4 h-4 text-rose-500" />
                       </Button>
                     </div>
                   </div>
@@ -216,7 +216,7 @@ export function StockWatchlist() {
                       <div className="text-sm text-gray-600">목표 수익률</div>
                       <div
                         className={`text-lg ${
-                          expectedReturn >= 0 ? 'text-green-600' : 'text-red-600'
+                          expectedReturn >= 0 ? 'text-rose-500/80' : 'text-sky-600/80'
                         }`}
                       >
                         {expectedReturn.toFixed(2)}%
@@ -235,7 +235,7 @@ export function StockWatchlist() {
                       <div className="text-sm text-gray-600">예상 수익</div>
                       <div
                         className={`${
-                          expectedProfit >= 0 ? 'text-green-600' : 'text-red-600'
+                          expectedProfit >= 0 ? 'text-rose-500/80' : 'text-sky-600/80'
                         }`}
                       >
                         {expectedProfit.toLocaleString()}{stock.currency === 'USD' ? '$' : '원'}
@@ -257,7 +257,7 @@ export function StockWatchlist() {
   return (
     <div className="space-y-4 p-4 md:p-6 max-w-6xl mx-auto">
       <div className="flex items-center gap-3 mb-2">
-        <List className="w-8 h-8 text-purple-600" />
+        <List className="w-8 h-8 text-violet-400" />
         <h1 className="text-2xl">주식 대기표</h1>
       </div>
 

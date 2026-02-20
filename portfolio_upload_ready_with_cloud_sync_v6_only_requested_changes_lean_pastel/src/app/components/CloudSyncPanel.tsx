@@ -255,7 +255,7 @@ export function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void })
 
       <div className="mt-2 text-sm">
         {status === 'error' ? (
-          <span className="text-red-600">{message}</span>
+          <span className="text-rose-500">{message}</span>
         ) : (
           <span className="text-gray-700">{message}</span>
         )}
@@ -264,7 +264,7 @@ export function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void })
       <div className="mt-2 text-xs text-gray-400">
         자동 동기화: 서버 확인 30초 / 자동 업로드 2분
         {autoReloadDisabled && (
-          <span className="block text-amber-700 mt-1">* 이 기기(브라우저)는 저장소가 제한돼서 자동 새로고침을 껐어. 필요한 경우 직접 새로고침만 해줘.</span>
+          <span className="block text-amber-700/80 mt-1">* 이 기기(브라우저)는 저장소가 제한돼서 자동 새로고침을 껐어. 필요한 경우 직접 새로고침만 해줘.</span>
         )}
       </div>
     </div>

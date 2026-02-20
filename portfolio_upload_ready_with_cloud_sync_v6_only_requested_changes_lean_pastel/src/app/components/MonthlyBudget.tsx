@@ -308,7 +308,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           className="w-32"
         />
         <Button size="sm" variant="ghost" onClick={() => deleteSubItem(category, itemId, subItem.id)}>
-          <Trash2 className="w-4 h-4 text-red-600" />
+          <Trash2 className="w-4 h-4 text-rose-500" />
         </Button>
       </div>
     );
@@ -341,10 +341,10 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
                     className="w-32"
                   />
                   <Button size="sm" variant="ghost" onClick={() => saveEdit(category)}>
-                    <Check className="w-4 h-4 text-green-600" />
+                    <Check className="w-4 h-4 text-emerald-500" />
                   </Button>
                   <Button size="sm" variant="ghost" onClick={cancelEdit}>
-                    <X className="w-4 h-4 text-red-600" />
+                    <X className="w-4 h-4 text-rose-500" />
                   </Button>
                 </>
               ) : (
@@ -353,7 +353,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </Button>
                   <span className="flex-1">{item.name}</span>
-                  <span className={`w-32 text-right font-semibold ${(item.subItems?.length || 0) > 0 ? 'text-blue-600' : ''}`}>
+                  <span className={`w-32 text-right font-semibold ${(item.subItems?.length || 0) > 0 ? 'text-sky-600/80' : ''}`}>
                     {itemTotal.toLocaleString()}원
                   </span>
                   {item.subItems && item.subItems.length > 0 && <span className="text-xs text-gray-500">({item.subItems.length}개)</span>}
@@ -361,7 +361,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
                     <Edit2 className="w-4 h-4" />
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => deleteItem(category, item.id)}>
-                    <Trash2 className="w-4 h-4 text-red-600" />
+                    <Trash2 className="w-4 h-4 text-rose-500" />
                   </Button>
                 </>
               )}
@@ -400,7 +400,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
       <div className="space-y-4 p-4 md:p-6 max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
-            <Wallet className="w-8 h-8 text-blue-600" />
+            <Wallet className="w-8 h-8 text-sky-500" />
             <h1 className="text-2xl">월급 대비 지출 가이드</h1>
           </div>
           <Button onClick={copyToAllMonths} variant="outline" className="gap-2">
@@ -409,7 +409,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           </Button>
         </div>
 
-        <Card className="p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md">
+        <Card className="p-4 bg-gradient-to-r from-sky-100 to-indigo-100 text-slate-900 shadow-sm border border-sky-200/60">
           <div className="flex items-center justify-between">
             <h2 className="text-xl">월급</h2>
             <div className="flex items-center gap-2">
@@ -417,7 +417,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
                 type="number"
                 value={data.salary}
                 onChange={(e) => setData({ ...data, salary: Number(e.target.value) })}
-                className="w-48 text-black"
+                className="w-48 bg-white/80 text-slate-900"
               />
               <span className="text-xl font-bold">원</span>
             </div>
@@ -427,12 +427,12 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
         <Card className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 shadow-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Home className="w-5 h-5 text-orange-600" />
-              <h2 className="text-xl text-orange-900">고정비</h2>
+              <Home className="w-5 h-5 text-orange-500" />
+              <h2 className="text-xl text-slate-800">고정비</h2>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-orange-700">{totalFixedCosts.toLocaleString()}원</div>
-              <Button onClick={() => addItem('fixedCosts')} size="sm" className="bg-orange-600 hover:bg-orange-700">
+              <div className="text-lg font-semibold text-slate-700">{totalFixedCosts.toLocaleString()}원</div>
+              <Button onClick={() => addItem('fixedCosts')} size="sm" className="bg-orange-200 hover:bg-orange-300 text-slate-900 border border-orange-200">
                 <Plus className="w-4 h-4 mr-1" />
                 추가
               </Button>
@@ -444,12 +444,12 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
         <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 border-green-200 shadow-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-green-600" />
-              <h2 className="text-xl text-green-900">생활비 (카드)</h2>
+              <CreditCard className="w-5 h-5 text-emerald-500" />
+              <h2 className="text-xl text-slate-800">생활비 (카드)</h2>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-green-700">{totalLivingExpenses.toLocaleString()}원</div>
-              <Button onClick={() => addItem('livingExpenses')} size="sm" className="bg-green-600 hover:bg-green-700">
+              <div className="text-lg font-semibold text-slate-700">{totalLivingExpenses.toLocaleString()}원</div>
+              <Button onClick={() => addItem('livingExpenses')} size="sm" className="bg-emerald-200 hover:bg-emerald-300 text-slate-900 border border-emerald-200">
                 <Plus className="w-4 h-4 mr-1" />
                 추가
               </Button>
@@ -464,12 +464,12 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
         <Card className="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200 shadow-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Wallet className="w-5 h-5 text-indigo-600" />
-              <h2 className="text-xl text-indigo-900">계좌 지출비</h2>
+              <Wallet className="w-5 h-5 text-indigo-500" />
+              <h2 className="text-xl text-slate-800">계좌 지출비</h2>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-indigo-700">{totalAccountExpenses.toLocaleString()}원</div>
-              <Button onClick={() => addItem('accountExpenses')} size="sm" className="bg-indigo-600 hover:bg-indigo-700">
+              <div className="text-lg font-semibold text-slate-700">{totalAccountExpenses.toLocaleString()}원</div>
+              <Button onClick={() => addItem('accountExpenses')} size="sm" className="bg-indigo-200 hover:bg-indigo-300 text-slate-900 border border-indigo-200">
                 <Plus className="w-4 h-4 mr-1" />
                 추가
               </Button>
@@ -485,12 +485,12 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
         <Card className="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200 shadow-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
-              <h2 className="text-xl text-emerald-900">추가 소득</h2>
+              <TrendingUp className="w-5 h-5 text-emerald-500" />
+              <h2 className="text-xl text-slate-800">추가 소득</h2>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-emerald-700">{totalIncome.toLocaleString()}원</div>
-              <Button onClick={() => addItem('income')} size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+              <div className="text-lg font-semibold text-slate-700">{totalIncome.toLocaleString()}원</div>
+              <Button onClick={() => addItem('income')} size="sm" className="bg-emerald-200 hover:bg-emerald-300 text-slate-900 border border-emerald-200">
                 <Plus className="w-4 h-4 mr-1" />
                 추가
               </Button>
@@ -502,7 +502,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           </div>
         </Card>
 
-        <Card className="p-6 bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-xl">
+        <Card className="p-6 bg-gradient-to-r from-violet-100 to-rose-100 text-slate-900 shadow-sm border border-violet-200/60">
           <h2 className="text-2xl mb-4">월별 요약</h2>
           <div className="grid grid-cols-2 gap-4 text-lg">
             <div className="flex justify-between">
@@ -515,15 +515,15 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
             </div>
             <div className="flex justify-between">
               <span>총 수입:</span>
-              <span className="font-bold text-yellow-300">{totalIncomeSalary.toLocaleString()}원</span>
+              <span className="font-bold text-amber-700">{totalIncomeSalary.toLocaleString()}원</span>
             </div>
             <div className="flex justify-between">
               <span>총 지출:</span>
               <span className="font-bold">{totalExpenses.toLocaleString()}원</span>
             </div>
-            <div className="col-span-2 flex justify-between pt-4 border-t-2 border-white/30">
+            <div className="col-span-2 flex justify-between pt-4 border-t-2 border-slate-200/70">
               <span className="text-xl">잔액:</span>
-              <span className={`text-2xl font-bold ${remainingSalary >= 0 ? 'text-yellow-300' : 'text-red-300'}`}>
+              <span className={`text-2xl font-bold ${remainingSalary >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                 {remainingSalary.toLocaleString()}원
               </span>
             </div>
