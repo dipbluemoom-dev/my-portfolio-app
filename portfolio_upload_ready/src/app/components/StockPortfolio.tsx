@@ -9,7 +9,6 @@ import {
   Settings,
   Wallet,
   CreditCard,
-  Copy,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -456,11 +455,6 @@ export function StockPortfolio() {
     setMonthlySales(
       monthlySales.map((item) => (item.month === month ? { ...item, sales } : item))
     );
-  };
-
-  const copyMonthlySalesFrom = (fromMonth: number, toMonth: number) => {
-    const src = monthlySales.find((m) => m.month === fromMonth)?.sales ?? 0;
-    updateMonthlySales(toMonth, src);
   };
 
   const COLORS = [
@@ -921,33 +915,25 @@ export function StockPortfolio() {
 
       {/* 월별 매도 현황 */}
       <Card className="p-6 bg-white shadow-md rounded-2xl border">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-end justify-between gap-3 mb-4 flex-wrap">
           <h2 className="text-2xl">월별 매도 현황</h2>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => copyMonthlySalesFrom(1, 2)}
-            className="bg-white"
-            title="2월을 1월 값으로 복사"
-          >
-            <Copy className="w-4 h-4 mr-1" />
-            1월 → 2월 복제
-          </Button>
+          <div className="text-xs text-gray-500">단위: 원</div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* ✅ 부피 줄인 컴팩트 입력 (복제 기능 제거) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
           {monthlySales.map((item) => (
-            <div key={item.month} className="flex items-center justify-between gap-2 p-3 rounded-xl bg-gray-50 border">
-              <div className="font-semibold">{item.month}월</div>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  value={item.sales}
-                  onChange={(e) => updateMonthlySales(item.month, Number(e.target.value))}
-                  className="w-40"
-                />
-                <span className="text-sm text-gray-500">원</span>
-              </div>
+            <div
+              key={item.month}
+              className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-gray-50 border"
+            >
+              <div className="text-sm font-semibold text-gray-700">{item.month}월</div>
+              <Input
+                type="number"
+                value={item.sales}
+                onChange={(e) => updateMonthlySales(item.month, Number(e.target.value))}
+                className="w-28 h-9 text-sm text-right"
+              />
             </div>
           ))}
         </div>

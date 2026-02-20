@@ -23,6 +23,36 @@ const readJson = <T,>(key: string, fallback: T): T => {
 
 const toNumber = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
+// MonthlyBudget(지출관리) 화면의 계산 로직과 동일하게 "잔액"을 계산
+const calcMonthlyBudgetBalance = (budgetData: any) => {
+  if (!budgetData) return 0;
+
+  const calcItemTotal = (item: any) => {
+    const sub = item?.subItems;
+    if (Array.isArray(sub) && sub.length > 0) {
+      return sub.reduce((sum: number, s: any) => sum + toNumber(s?.amount), 0);
+    }
+    return toNumber(item?.amount);
+  };
+
+  const salary = toNumber(budgetData?.salary);
+  const fixedCosts = Array.isArray(budgetData?.fixedCosts) ? budgetData.fixedCosts : [];
+  const income = Array.isArray(budgetData?.income) ? budgetData.income : [];
+  const livingExpenses = Array.isArray(budgetData?.livingExpenses) ? budgetData.livingExpenses : [];
+  const accountExpenses = Array.isArray(budgetData?.accountExpenses) ? budgetData.accountExpenses : [];
+
+  const totalFixed = fixedCosts.reduce((sum: number, it: any) => sum + calcItemTotal(it), 0);
+  const totalIncome = income.reduce((sum: number, it: any) => sum + calcItemTotal(it), 0);
+  const totalLiving = livingExpenses.reduce((sum: number, it: any) => sum + calcItemTotal(it), 0);
+  const totalAccount = accountExpenses.reduce((sum: number, it: any) => sum + calcItemTotal(it), 0);
+
+  const totalExpenses = totalFixed + totalLiving + totalAccount;
+  const totalIncomeSalary = salary + totalIncome;
+
+  // ✅ 월별 요약의 "잔액" = (월급 + 추가소득) - (고정비 + 생활비 + 계좌지출비)
+  return totalIncomeSalary - totalExpenses;
+};
+
 export function AssetTrend() {
   const data = useMemo(() => {
     const getMonthlyData = (): MonthlyData[] => {
@@ -31,8 +61,33 @@ export function AssetTrend() {
       // ✅ 통장/저축
       const bankData = readJson<any>('bankAccounts', null);
       const bankAccounts = bankData?.accounts || [];
-      const savings = bankData?.savings || [];
-      const bankAsset = [...bankAccounts, ...savings].reduce((sum, item) => sum + toNumber(item.amount), 0);
+      const savingsAccounts = bankData?.savingsAccounts || bankData?.savings || [];
+
+      // BankAccounts(통장 페이지) "전체 자산 요약"의 "총 자산"과 동일한 기준
+      // - 일반 계좌: balance 합
+      // - 적금: deposits(amount * count) 합
+      const totalAccountBalance = (Array.isArray(bankAccounts) ? bankAccounts : []).reduce(
+        (sum: number, acc: any) => sum + toNumber(acc?.balance ?? acc?.amount ?? 0),
+        0
+      );
+
+      const totalSavingsBalance = (Array.isArray(savingsAccounts) ? savingsAccounts : []).reduce(
+        (sum: number, s: any) => {
+          // 최신 구조: deposits[]
+          if (Array.isArray(s?.deposits)) {
+            const v = s.deposits.reduce(
+              (ss: number, d: any) => ss + toNumber(d?.amount) * toNumber(d?.count),
+              0
+            );
+            return sum + v;
+          }
+          // 구버전 구조 fallback
+          return sum + toNumber(s?.amount ?? 0);
+        },
+        0
+      );
+
+      const bankAsset = totalAccountBalance + totalSavingsBalance;
 
       // ✅ 주식(오준석 계좌만)
       const stockPortfolio = readJson<any>('stockPortfolio', null);
@@ -58,9 +113,9 @@ export function AssetTrend() {
       let cumulativeBudgetBalance = START_ASSET_BEFORE_JAN;
 
       return months.map((month, index) => {
-        // ✅ 가계부 잔액: 총수입 - 총지출 (MonthlyBudget에서 계산된 값)
+        // ✅ 이번달 잔액: 지출관리 하단 "월별 요약"의 "잔액"과 동일
         const budgetData = readJson<any>(`monthlyBudget_${index + 1}`, null);
-        const budgetBalance = toNumber(budgetData?.remainingSalary ?? budgetData?.balance ?? 0);
+        const budgetBalance = toNumber(calcMonthlyBudgetBalance(budgetData));
 
         // ✅ 연초 시작액부터 월 잔액을 누적해서 현재 자산을 계산
         cumulativeBudgetBalance += budgetBalance;
