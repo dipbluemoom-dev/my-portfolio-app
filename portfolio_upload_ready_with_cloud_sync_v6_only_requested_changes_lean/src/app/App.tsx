@@ -1,9 +1,5 @@
-import { useState } from 'react';
+import { Suspense, lazy, useCallback, useMemo, useState } from 'react';
 import { MonthlyBudget } from './components/MonthlyBudget';
-import { StockPortfolio } from './components/StockPortfolio';
-import { StockWatchlist } from './components/StockWatchlist';
-import { BankAccounts } from './components/BankAccounts';
-import { AssetTrend } from './components/AssetTrend';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Wallet, TrendingUp, List, Landmark, LineChart, Save } from 'lucide-react';
@@ -12,6 +8,44 @@ import { useSupabaseSession } from './hooks/useSupabaseSession';
 import { isSupabaseConfigured } from './lib/supabaseClient';
 import { pushToCloud, readLocalStoragePayload } from './lib/cloudSync';
 
+// ✅ 탭별로 번들을 쪼개서 초기 로딩을 가볍게 (수치/기능은 동일)
+// 지출관리는 기본 탭이라(초기 진입) 분리해도 이득이 거의 없어서 그대로 번들에 포함
+const StockPortfolio = lazy(() =>
+  import('./components/StockPortfolio').then((m) => ({ default: m.StockPortfolio }))
+);
+const StockWatchlist = lazy(() =>
+  import('./components/StockWatchlist').then((m) => ({ default: m.StockWatchlist }))
+);
+const BankAccounts = lazy(() =>
+  import('./components/BankAccounts').then((m) => ({ default: m.BankAccounts }))
+);
+const AssetTrend = lazy(() =>
+  import('./components/AssetTrend').then((m) => ({ default: m.AssetTrend }))
+);
+
+const MONTHS = [
+  { value: 1, label: '1월' },
+  { value: 2, label: '2월' },
+  { value: 3, label: '3월' },
+  { value: 4, label: '4월' },
+  { value: 5, label: '5월' },
+  { value: 6, label: '6월' },
+  { value: 7, label: '7월' },
+  { value: 8, label: '8월' },
+  { value: 9, label: '9월' },
+  { value: 10, label: '10월' },
+  { value: 11, label: '11월' },
+  { value: 12, label: '12월' },
+];
+
+function TabFallback() {
+  return (
+    <div className="p-6 bg-white rounded-2xl border shadow-sm text-sm text-gray-500">
+      불러오는 중…
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('budget');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
@@ -19,9 +53,9 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!isSupabaseConfigured) {
-      alert('클라우드 저장을 사용하려면 Vercel 환경변수(SUPABASE_URL, SUPABASE_ANON_KEY)를 설정해야 해요.');
+      alert('클라우드 저장을 사용하려면 환경변수(VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)를 설정해야 해요.');
       return;
     }
     if (!user) {
@@ -40,22 +74,9 @@ export default function App() {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [user]);
 
-  const months = [
-    { value: 1, label: '1월' },
-    { value: 2, label: '2월' },
-    { value: 3, label: '3월' },
-    { value: 4, label: '4월' },
-    { value: 5, label: '5월' },
-    { value: 6, label: '6월' },
-    { value: 7, label: '7월' },
-    { value: 8, label: '8월' },
-    { value: 9, label: '9월' },
-    { value: 10, label: '10월' },
-    { value: 11, label: '11월' },
-    { value: 12, label: '12월' },
-  ];
+  const months = useMemo(() => MONTHS, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
@@ -145,19 +166,27 @@ export default function App() {
           </TabsContent>
 
           <TabsContent value="stocks" className="mt-0">
-            <StockPortfolio />
+            <Suspense fallback={<TabFallback />}>
+              <StockPortfolio />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="watchlist" className="mt-0">
-            <StockWatchlist />
+            <Suspense fallback={<TabFallback />}>
+              <StockWatchlist />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="banks" className="mt-0">
-            <BankAccounts />
+            <Suspense fallback={<TabFallback />}>
+              <BankAccounts />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="trend" className="mt-0">
-            <AssetTrend />
+            <Suspense fallback={<TabFallback />}>
+              <AssetTrend />
+            </Suspense>
           </TabsContent>
         </Tabs>
       </div>
