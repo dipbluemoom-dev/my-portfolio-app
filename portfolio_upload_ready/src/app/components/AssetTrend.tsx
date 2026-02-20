@@ -8,6 +8,7 @@ interface MonthlyData {
   bankAsset: number;
   stockAssetOjunseok: number;
   currentAsset: number;
+  cumulativeBudgetBalance: number;
 }
 
 const readJson = <T,>(key: string, fallback: T): T => {
@@ -52,13 +53,20 @@ export function AssetTrend() {
         return sum + currentValueKRW;
       }, 0);
 
+      // ✅ 1월 이전달(연초 시작) 자산 시작액 (사용자 지정)
+      const START_ASSET_BEFORE_JAN = -4361034;
+      let cumulativeBudgetBalance = START_ASSET_BEFORE_JAN;
+
       return months.map((month, index) => {
         // ✅ 가계부 잔액: 총수입 - 총지출 (MonthlyBudget에서 계산된 값)
         const budgetData = readJson<any>(`monthlyBudget_${index + 1}`, null);
         const budgetBalance = toNumber(budgetData?.remainingSalary ?? budgetData?.balance ?? 0);
 
-        // ✅ 현재 자산 = 해당 월 잔액 + '오준석' 주식 총 평가금액 + 통장 총 자산
-        const currentAsset = budgetBalance + stockAssetOjunseok + bankAsset;
+        // ✅ 연초 시작액부터 월 잔액을 누적해서 현재 자산을 계산
+        cumulativeBudgetBalance += budgetBalance;
+
+        // ✅ 현재 자산 = (연초 시작액 + 누적 월 잔액) + 오준석 주식 평가금액 + 통장 자산
+        const currentAsset = cumulativeBudgetBalance + stockAssetOjunseok + bankAsset;
 
         return {
           month,
@@ -66,6 +74,7 @@ export function AssetTrend() {
           bankAsset,
           stockAssetOjunseok,
           currentAsset,
+          cumulativeBudgetBalance,
         };
       });
     };
@@ -73,33 +82,39 @@ export function AssetTrend() {
     return getMonthlyData();
   }, []);
 
+  const currentMonthIndex = new Date().getMonth();
+  const current = data[currentMonthIndex] || data[0];
+
   const formatKRW = (value: number) => Math.round(value).toLocaleString();
 
   return (
     <Card className="p-6 bg-white shadow-md rounded-2xl border">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl">자산 추이</h2>
+        <div>
+          <h2 className="text-2xl">자산 추이</h2>
+          <div className="text-xs text-gray-500 mt-1">연초 시작 자산(1월 이전): ₩ -4,361,034</div>
+        </div>
         <div className="text-sm text-gray-500">
-          현재 자산 = 월 잔액 + 오준석 주식 평가금액 + 통장 자산
+          현재 자산 = (연초 시작액 + 누적 월 잔액) + 오준석 주식 + 통장 자산
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="p-4 bg-blue-50 rounded-xl border">
           <div className="text-sm text-gray-600">통장 총 자산</div>
-          <div className="text-2xl font-bold text-blue-600">₩ {formatKRW(data[0]?.bankAsset || 0)}</div>
+          <div className="text-2xl font-bold text-blue-600">₩ {formatKRW(current?.bankAsset || 0)}</div>
         </div>
         <div className="p-4 bg-emerald-50 rounded-xl border">
           <div className="text-sm text-gray-600">오준석 주식 평가금액</div>
-          <div className="text-2xl font-bold text-emerald-700">₩ {formatKRW(data[0]?.stockAssetOjunseok || 0)}</div>
+          <div className="text-2xl font-bold text-emerald-700">₩ {formatKRW(current?.stockAssetOjunseok || 0)}</div>
         </div>
         <div className="p-4 bg-purple-50 rounded-xl border">
           <div className="text-sm text-gray-600">이번 달 잔액</div>
-          <div className="text-2xl font-bold text-purple-600">₩ {formatKRW(data[0]?.budgetBalance || 0)}</div>
+          <div className="text-2xl font-bold text-purple-600">₩ {formatKRW(current?.budgetBalance || 0)}</div>
         </div>
         <div className="p-4 bg-orange-50 rounded-xl border">
           <div className="text-sm text-gray-600">현재 자산</div>
-          <div className="text-2xl font-bold text-orange-600">₩ {formatKRW(data[0]?.currentAsset || 0)}</div>
+          <div className="text-2xl font-bold text-orange-600">₩ {formatKRW(current?.currentAsset || 0)}</div>
         </div>
       </div>
 

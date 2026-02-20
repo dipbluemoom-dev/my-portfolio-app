@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 import {
   pullFromCloud,
   pushToCloud,
@@ -25,17 +25,6 @@ const AUTO_RELOAD_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1시간
 const AUTO_RELOAD_KEY = 'cloudSyncLastAutoReloadAt';
 
 export function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void }) {
-  if (!isSupabaseConfigured || !supabase) {
-    return (
-      <div className="p-4 rounded-2xl border bg-white shadow-sm">
-        <div className="font-semibold mb-1">동기화</div>
-        <div className="text-sm text-red-600">
-          Supabase 설정이 아직 안 되어있어. (Vercel 환경변수 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 필요)
-        </div>
-      </div>
-    );
-  }
-
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'loggedIn' | 'error'>('idle');
   const [message, setMessage] = useState('');
@@ -168,7 +157,7 @@ export function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void })
 
         if (canAutoReloadNow()) {
           markAutoReloadNow();
-          setMessage('회사/다른 기기 값으로 맞췄어. 새로고침 한 번 할게!');
+          setMessage('다른 기기 값으로 동기화했어. 새로고침 할게!');
           onToast?.('다른 기기 값으로 맞췄어. 새로고침 할게!');
           setTimeout(() => window.location.reload(), 600);
         } else {
@@ -243,7 +232,7 @@ export function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void })
     <div className="p-4 rounded-2xl border bg-white shadow-sm">
       <div className="font-semibold mb-1">동기화</div>
       <div className="text-sm text-gray-600 mb-3">
-        로그인하면 회사/집/폰에서 값이 같아져.
+        로그인하면 저장/불러오기가 가능해.
         <span className="block text-xs text-gray-400 mt-1">현재 접속 도메인: {currentDomain}</span>
         <span className="block text-xs text-gray-400">메일 링크가 안 열리면: 메일앱/카톡 내장 브라우저 말고 Safari(또는 크롬)로 열어줘</span>
       </div>

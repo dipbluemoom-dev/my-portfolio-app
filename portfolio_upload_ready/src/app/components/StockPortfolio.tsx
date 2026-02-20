@@ -392,30 +392,6 @@ export function StockPortfolio() {
       .map(({ name, value }) => ({ name, value }));
   };
 
-  // 전체 포트폴리오 비중 (구매비용 기준) - 동일 티커는 합산
-  const getTotalWeights = () => {
-    const rate = Number(data.exchangeRate) || 0;
-    const byTicker: Record<string, number> = {};
-
-    for (const account of data.accounts) {
-      for (const stock of account.stocks) {
-        const t = normalizeTicker(stock.ticker);
-        const buyCost = (Number(stock.avgPrice) || 0) * (Number(stock.quantity) || 0);
-        const buyCostKRW = stock.currency === 'USD' ? buyCost * rate : buyCost;
-        if (buyCostKRW <= 0) continue;
-        byTicker[t] = (byTicker[t] || 0) + buyCostKRW;
-      }
-    }
-
-    const total = Object.values(byTicker).reduce((a, b) => a + b, 0);
-    if (total <= 0) return [];
-
-    return Object.entries(byTicker)
-      .map(([ticker, v]) => ({ name: ticker, value: (v / total) * 100, raw: v }))
-      .sort((a, b) => b.raw - a.raw)
-      .map(({ name, value }) => ({ name, value }));
-  };
-
   // 동일 티커 합산(중복 티커만)
   const duplicateTickerSummary = useMemo(() => {
     const rate = Number(data.exchangeRate) || 0;
@@ -501,9 +477,6 @@ export function StockPortfolio() {
     '#14b8a6',
     '#eab308',
   ];
-
-  const totalWeights = useMemo(() => getTotalWeights(), [data.accounts, data.exchangeRate]);
-
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3">
@@ -1021,64 +994,40 @@ export function StockPortfolio() {
             );
           })}
 
-          {/* 전체 */}
-          <div className="p-4 rounded-2xl border bg-gray-50">
-            <div className="font-semibold mb-2">전체 포트폴리오 비중</div>
-            <div className="h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={totalWeights}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    label={({ name, value }) => `${name} (${value.toFixed(1)}%)`}
-                  >
-                    {totalWeights.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: any) => `${Number(value).toFixed(2)}%`} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
         </div>
+
         {/* 동일 티커 합산(중복만) */}
         {duplicateTickerSummary.length > 0 && (
-          <div className=\"mt-6\">
-            <h3 className=\"text-lg font-semibold mb-3\">동일 티커 합산 (중복 티커만)</h3>
-            <div className=\"grid grid-cols-1 md:grid-cols-2 gap-3\">
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold mb-3">동일 티커 합산 (중복 티커만)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {duplicateTickerSummary.map((g) => {
                 const weight = totalPortfolioBuyCostKRW > 0 ? (g.buyCostKRW / totalPortfolioBuyCostKRW) * 100 : 0;
                 return (
-                  <div key={g.ticker} className=\"p-4 rounded-2xl border bg-gray-50\">
-                    <div className=\"flex items-center justify-between\">
-                      <div className=\"text-lg font-bold\">{g.ticker}</div>
-                      <div className=\"text-xs text-gray-500\">{g.count}개 포지션 · 비중 {fmt2(weight)}%</div>
+                  <div key={g.ticker} className="p-4 rounded-2xl border bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div className="text-lg font-bold">{g.ticker}</div>
+                      <div className="text-xs text-gray-500">{g.count}개 포지션 · 비중 {fmt2(weight)}%</div>
                     </div>
-                    <div className=\"mt-3 grid grid-cols-2 gap-2 text-sm\">
-                      <div className=\"p-2 rounded-lg bg-white border\">
-                        <div className=\"text-xs text-gray-500\">매입원금(원)</div>
-                        <div className=\"font-semibold\">{fmt0(g.buyCostKRW)}</div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <div className="p-2 rounded-lg bg-white border">
+                        <div className="text-xs text-gray-500">매입원금(원)</div>
+                        <div className="font-semibold">{fmt0(g.buyCostKRW)}</div>
                       </div>
-                      <div className=\"p-2 rounded-lg bg-white border\">
-                        <div className=\"text-xs text-gray-500\">평가금액(원)</div>
-                        <div className=\"font-semibold\">{fmt0(g.currentValueKRW)}</div>
+                      <div className="p-2 rounded-lg bg-white border">
+                        <div className="text-xs text-gray-500">평가금액(원)</div>
+                        <div className="font-semibold">{fmt0(g.currentValueKRW)}</div>
                       </div>
-                      <div className=\"p-2 rounded-lg bg-white border\">
-                        <div className=\"text-xs text-gray-500\">손익(원)</div>
-                        <div className={\"font-bold \" + (g.profitLossKRW >= 0 ? 'text-green-600' : 'text-red-600')}
+                      <div className="p-2 rounded-lg bg-white border">
+                        <div className="text-xs text-gray-500">손익(원)</div>
+                        <div className={"font-bold " + (g.profitLossKRW >= 0 ? 'text-green-600' : 'text-red-600')}
                         >
                           {fmt0(g.profitLossKRW)}
                         </div>
                       </div>
-                      <div className=\"p-2 rounded-lg bg-white border\">
-                        <div className=\"text-xs text-gray-500\">손익률</div>
-                        <div className={\"font-bold \" + (g.profitLossPct >= 0 ? 'text-green-600' : 'text-red-600')}
+                      <div className="p-2 rounded-lg bg-white border">
+                        <div className="text-xs text-gray-500">손익률</div>
+                        <div className={"font-bold " + (g.profitLossPct >= 0 ? 'text-green-600' : 'text-red-600')}
                         >
                           {fmtPct(g.profitLossPct)}
                         </div>
