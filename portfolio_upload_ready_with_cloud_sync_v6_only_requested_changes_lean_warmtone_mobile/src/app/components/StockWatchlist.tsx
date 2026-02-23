@@ -257,7 +257,7 @@ export function StockWatchlist() {
   return (
     <div className="space-y-4 p-4 md:p-6 max-w-6xl mx-auto">
       <div className="flex items-center gap-3 mb-2">
-        <List className="w-8 h-8 text-violet-400" />
+        <List className="w-8 h-8 text-amber-500" />
         <h1 className="text-2xl">주식 대기표</h1>
       </div>
 

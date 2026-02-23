@@ -457,20 +457,21 @@ export function StockPortfolio() {
     );
   };
 
-  // ✅ 파스텔 톤(눈 편한) 차트 컬러
+  // ✅ 웜톤 파스텔(눈 편한) 차트 컬러
+  // 파란 계열은 UI 전체 톤에서 제외(단, 손익(-) 표시는 별도 규칙으로 파스텔 블루 유지)
   const COLORS = [
-    '#7dd3fc', // sky-300
-    '#6ee7b7', // emerald-300
-    '#fde68a', // amber-200
     '#fda4af', // rose-300
-    '#c4b5fd', // violet-300
-    '#67e8f9', // cyan-300
-    '#fdba74', // orange-300
-    '#bef264', // lime-300
+    '#fdba74', // amber-300
     '#f9a8d4', // pink-300
-    '#cbd5e1', // slate-300
-    '#5eead4', // teal-300
-    '#fecaca', // red-200
+    '#c4b5fd', // violet-300(연한 보라)
+    '#fde68a', // amber-200
+    '#fecdd3', // rose-200
+    '#fed7aa', // orange-200
+    '#bbf7d0', // green-200
+    '#ddd6fe', // violet-200
+    '#fbcfe8', // pink-200
+    '#d1fae5', // emerald-100
+    '#e7e5e4', // stone-200
   ];
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
@@ -511,8 +512,8 @@ export function StockPortfolio() {
               <div className="text-sm text-gray-600">총 주식 평가금액(원화)</div>
               <div className="text-3xl font-bold mt-1">₩ {fmt0(totalAssetsKRW)}</div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-              <Wallet className="w-5 h-5 text-sky-500" />
+            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+              <Wallet className="w-5 h-5 text-amber-500" />
             </div>
           </div>
         </Card>

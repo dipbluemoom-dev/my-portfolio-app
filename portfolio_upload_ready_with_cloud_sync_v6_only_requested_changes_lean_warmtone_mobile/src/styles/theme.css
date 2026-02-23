@@ -8,8 +8,8 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* ✅ 파스텔 톤(눈 편한 기본 컬러) */
-  --primary: #a5b4fc; /* indigo-300 */
+  /* ✅ 웜톤 파스텔(눈 편한 기본 컬러) */
+  --primary: #f9a8d4; /* pink-300 */
   --primary-foreground: #0f172a; /* slate-900 */
   --secondary: oklch(0.95 0.0058 264.53);
   --secondary-foreground: #030213;
@@ -26,11 +26,12 @@
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  /* 차트도 '웜톤 파스텔' 위주로 */
+  --chart-1: #fda4af; /* rose-300 */
+  --chart-2: #fdba74; /* amber-300 */
+  --chart-3: #f9a8d4; /* pink-300 */
+  --chart-4: #fbcfe8; /* pink-200 */
+  --chart-5: #fecdd3; /* rose-200 */
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);

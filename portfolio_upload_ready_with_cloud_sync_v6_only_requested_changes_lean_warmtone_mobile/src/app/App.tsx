@@ -79,11 +79,11 @@ export default function App() {
   const months = useMemo(() => MONTHS, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50 to-violet-50">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-rose-50 to-fuchsia-50">
       <div className="container mx-auto py-4 md:py-8 px-2 md:px-4">
         <div className="mb-6 relative">
           <div className="text-center">
-            <h1 className="text-3xl md:text-4xl mb-2 bg-gradient-to-r from-sky-500 to-violet-500 bg-clip-text text-transparent">
+            <h1 className="text-3xl md:text-4xl mb-2 bg-gradient-to-r from-rose-500 to-amber-500 bg-clip-text text-transparent">
               자산 포트폴리오
             </h1>
           </div>
@@ -103,7 +103,7 @@ export default function App() {
           <TabsList className="grid w-full grid-cols-5 mb-4 h-auto bg-white/80 backdrop-blur shadow-md rounded-xl p-1">
             <TabsTrigger 
               value="budget" 
-              className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 data-[state=active]:bg-sky-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-sky-200"
+              className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 data-[state=active]:bg-amber-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-amber-200"
             >
               <Wallet className="w-5 h-5" />
               <span className="text-xs md:text-sm">지출관리</span>
@@ -117,21 +117,21 @@ export default function App() {
             </TabsTrigger>
             <TabsTrigger 
               value="watchlist"
-              className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 data-[state=active]:bg-violet-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-violet-200"
+              className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 data-[state=active]:bg-fuchsia-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-fuchsia-200"
             >
               <List className="w-5 h-5" />
               <span className="text-xs md:text-sm">주식 일정표</span>
             </TabsTrigger>
             <TabsTrigger 
               value="banks"
-              className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 data-[state=active]:bg-cyan-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-cyan-200"
+              className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 data-[state=active]:bg-orange-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-orange-200"
             >
               <Landmark className="w-5 h-5" />
               <span className="text-xs md:text-sm">통장</span>
             </TabsTrigger>
             <TabsTrigger 
               value="trend"
-              className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 data-[state=active]:bg-amber-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-amber-200"
+              className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 data-[state=active]:bg-pink-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-pink-200"
             >
               <LineChart className="w-5 h-5" />
               <span className="text-xs md:text-sm">자산 추이</span>

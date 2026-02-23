@@ -353,7 +353,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </Button>
                   <span className="flex-1">{item.name}</span>
-                  <span className={`w-32 text-right font-semibold ${(item.subItems?.length || 0) > 0 ? 'text-sky-600/80' : ''}`}>
+                  <span className={`w-32 text-right font-semibold ${(item.subItems?.length || 0) > 0 ? 'text-amber-700/80' : ''}`}>
                     {itemTotal.toLocaleString()}원
                   </span>
                   {item.subItems && item.subItems.length > 0 && <span className="text-xs text-gray-500">({item.subItems.length}개)</span>}
@@ -400,7 +400,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
       <div className="space-y-4 p-4 md:p-6 max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
-            <Wallet className="w-8 h-8 text-sky-500" />
+            <Wallet className="w-8 h-8 text-amber-500" />
             <h1 className="text-2xl">월급 대비 지출 가이드</h1>
           </div>
           <Button onClick={copyToAllMonths} variant="outline" className="gap-2">
@@ -409,7 +409,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           </Button>
         </div>
 
-        <Card className="p-4 bg-gradient-to-r from-sky-100 to-indigo-100 text-slate-900 shadow-sm border border-sky-200/60">
+        <Card className="p-4 bg-gradient-to-r from-amber-100 to-rose-100 text-slate-900 shadow-sm border border-amber-200/60">
           <div className="flex items-center justify-between">
             <h2 className="text-xl">월급</h2>
             <div className="flex items-center gap-2">
@@ -461,15 +461,15 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           </div>
         </Card>
 
-        <Card className="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 border-indigo-200 shadow-md">
+        <Card className="p-4 bg-gradient-to-br from-rose-50 to-amber-100 border-rose-200 shadow-md">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Wallet className="w-5 h-5 text-indigo-500" />
+              <Wallet className="w-5 h-5 text-amber-600" />
               <h2 className="text-xl text-slate-800">계좌 지출비</h2>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-lg font-semibold text-slate-700">{totalAccountExpenses.toLocaleString()}원</div>
-              <Button onClick={() => addItem('accountExpenses')} size="sm" className="bg-indigo-200 hover:bg-indigo-300 text-slate-900 border border-indigo-200">
+              <Button onClick={() => addItem('accountExpenses')} size="sm" className="bg-amber-200 hover:bg-amber-300 text-slate-900 border border-amber-200">
                 <Plus className="w-4 h-4 mr-1" />
                 추가
               </Button>
@@ -502,7 +502,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           </div>
         </Card>
 
-        <Card className="p-6 bg-gradient-to-r from-violet-100 to-rose-100 text-slate-900 shadow-sm border border-violet-200/60">
+        <Card className="p-6 bg-gradient-to-r from-rose-100 to-amber-100 text-slate-900 shadow-sm border border-rose-200/60">
           <h2 className="text-2xl mb-4">월별 요약</h2>
           <div className="grid grid-cols-2 gap-4 text-lg">
             <div className="flex justify-between">

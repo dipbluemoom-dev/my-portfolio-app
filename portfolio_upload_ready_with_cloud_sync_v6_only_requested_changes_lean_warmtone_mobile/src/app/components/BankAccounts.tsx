@@ -182,18 +182,18 @@ export function BankAccounts() {
   return (
     <div className="space-y-4 p-4 md:p-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-2">
-        <Landmark className="w-8 h-8 text-sky-500" />
+        <Landmark className="w-8 h-8 text-amber-500" />
         <h1 className="text-2xl">통장 정리</h1>
       </div>
 
       {/* 일반 계좌 */}
-      <Card className="p-4 bg-gradient-to-br from-sky-50 to-sky-100 border-sky-200 shadow-sm">
+      <Card className="p-4 bg-gradient-to-br from-amber-50 to-rose-100 border-amber-200 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Landmark className="w-5 h-5 text-sky-500" />
+            <Landmark className="w-5 h-5 text-amber-500" />
             <h2 className="text-xl text-slate-800">일반 계좌</h2>
           </div>
-          <Button onClick={addAccount} size="sm" className="bg-sky-200 hover:bg-sky-300 text-slate-900 border border-sky-200">
+          <Button onClick={addAccount} size="sm" className="bg-amber-200 hover:bg-amber-300 text-slate-900 border border-amber-200">
             <Plus className="w-4 h-4 mr-1" />
             계좌 추가
           </Button>
@@ -229,7 +229,7 @@ export function BankAccounts() {
                 </Button>
               </div>
             ))}
-            <div className="flex justify-end pt-2 border-t-2 border-sky-200">
+            <div className="flex justify-end pt-2 border-t-2 border-amber-200">
               <div className="text-lg font-bold text-slate-800">
                 총 잔액: {totalAccountBalance.toLocaleString()}원
               </div>
@@ -386,7 +386,7 @@ export function BankAccounts() {
       </Card>
 
       {/* 전체 요약 */}
-      <Card className="p-6 bg-gradient-to-r from-emerald-100 to-sky-100 text-slate-900 shadow-sm border border-emerald-200/60">
+      <Card className="p-6 bg-gradient-to-r from-emerald-100 to-amber-100 text-slate-900 shadow-sm border border-emerald-200/60">
         <div className="flex items-center gap-2 mb-4">
           <PiggyBank className="w-6 h-6" />
           <h2 className="text-2xl">전체 자산 요약</h2>
