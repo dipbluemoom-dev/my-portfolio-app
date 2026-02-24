@@ -8,8 +8,8 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* ✅ 웜톤 파스텔(눈 편한 기본 컬러) */
-  --primary: #f9a8d4; /* pink-300 */
+  /* ✅ 웜톤 파스텔(채도 낮춘, 눈 편한 기본 컬러) */
+  --primary: #ead6cf; /* muted peach */
   --primary-foreground: #0f172a; /* slate-900 */
   --secondary: oklch(0.95 0.0058 264.53);
   --secondary-foreground: #030213;
@@ -21,17 +21,17 @@
   --destructive-foreground: #ffffff;
   --border: rgba(0, 0, 0, 0.1);
   --input: transparent;
-  --input-background: #f3f3f5;
+  --input-background: #f7f3f0;
   --switch-background: #cbced4;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --ring: oklch(0.708 0 0);
-  /* 차트도 '웜톤 파스텔' 위주로 */
-  --chart-1: #fda4af; /* rose-300 */
-  --chart-2: #fdba74; /* amber-300 */
-  --chart-3: #f9a8d4; /* pink-300 */
-  --chart-4: #fbcfe8; /* pink-200 */
-  --chart-5: #fecdd3; /* rose-200 */
+  /* 차트도 '저채도 웜톤 파스텔' 위주로 */
+  --chart-1: #e9c7c1; /* muted rose */
+  --chart-2: #edd8b6; /* muted amber */
+  --chart-3: #e6d3e9; /* muted lilac */
+  --chart-4: #d9e4dd; /* muted sage */
+  --chart-5: #eadfd6; /* muted sand */
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);

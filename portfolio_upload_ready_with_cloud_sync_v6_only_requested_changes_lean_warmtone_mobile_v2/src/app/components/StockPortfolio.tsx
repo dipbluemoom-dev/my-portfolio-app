@@ -19,7 +19,6 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
-  Legend,
 } from 'recharts';
 
 interface BuyRecord {
@@ -67,6 +66,11 @@ interface MonthlySalesData {
 
 const normalizeTicker = (t: string) => (t || '').trim().toUpperCase();
 
+const round2 = (n: number) => (Number.isFinite(n) ? Math.round(n * 100) / 100 : 0);
+
+type TickerPriceMap = Record<string, number>; // key: "TICKER|USD" / "TICKER|KRW"
+const tickerKey = (ticker: string, currency: 'KRW' | 'USD') => `${normalizeTicker(ticker)}|${currency}`;
+
 const fmt2 = (n: number) =>
   (Number.isFinite(n) ? n : 0).toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -109,6 +113,25 @@ export function StockPortfolio() {
     }
     return Array.from({ length: 12 }, (_, i) => ({ month: i + 1, sales: 0 }));
   });
+
+  // ✅ 공통(티커별) 현재가: 동일 티커가 계좌에 여러 개 있어도 한 번만 입력해서 자동 계산
+  // (기존 데이터/계산 로직은 유지, 현재가만 공통값이 있으면 우선 적용)
+  const [tickerPrices, setTickerPrices] = useState<TickerPriceMap>(() => {
+    const saved = localStorage.getItem('stockTickerPrices');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch {
+        // ignore
+      }
+    }
+    return {};
+  });
+
+  useEffect(() => {
+    localStorage.setItem('stockTickerPrices', JSON.stringify(tickerPrices));
+  }, [tickerPrices]);
 
   // ✅ 전역 환율(주식/주식대기표/자산추이에서 함께 씀)
   useEffect(() => {
@@ -272,7 +295,7 @@ export function StockPortfolio() {
       0
     );
 
-    const avgPrice = totalQty > 0 ? totalCost / totalQty : 0;
+    const avgPrice = totalQty > 0 ? round2(totalCost / totalQty) : 0;
 
     updateStock(accountId, stockId, {
       quantity: totalQty,
@@ -320,8 +343,13 @@ export function StockPortfolio() {
   };
 
   const getStockMetrics = (stock: Stock) => {
+    const effCurrentPrice = (() => {
+      const k = tickerKey(stock.ticker, stock.currency);
+      const v = tickerPrices[k];
+      return Number.isFinite(v) ? v : Number(stock.currentPrice) || 0;
+    })();
     const buyCost = (Number(stock.avgPrice) || 0) * (Number(stock.quantity) || 0);
-    const currentValue = (Number(stock.currentPrice) || 0) * (Number(stock.quantity) || 0);
+    const currentValue = effCurrentPrice * (Number(stock.quantity) || 0);
     const profitLoss = currentValue - buyCost;
 
     const profitLossPercent = buyCost !== 0 ? (profitLoss / buyCost) * 100 : 0;
@@ -337,6 +365,7 @@ export function StockPortfolio() {
     const profitLossKRW = currentValueKRW - buyCostKRW;
 
     return {
+      effCurrentPrice,
       buyCost,
       currentValue,
       profitLoss,
@@ -354,17 +383,21 @@ export function StockPortfolio() {
     let total = 0;
     for (const account of data.accounts) {
       for (const stock of account.stocks) {
-        const currentValue = (Number(stock.currentPrice) || 0) * (Number(stock.quantity) || 0);
+        const k = tickerKey(stock.ticker, stock.currency);
+        const eff = Number.isFinite(tickerPrices[k]) ? tickerPrices[k] : Number(stock.currentPrice) || 0;
+        const currentValue = eff * (Number(stock.quantity) || 0);
         total += stock.currency === 'USD' ? currentValue * rate : currentValue;
       }
     }
     return total;
-  }, [data.accounts, data.exchangeRate]);
+  }, [data.accounts, data.exchangeRate, tickerPrices]);
 
   const getAccountTotalKRW = (account: StockAccount) => {
     const rate = Number(data.exchangeRate) || 0;
     return account.stocks.reduce((sum, stock) => {
-      const currentValue = (Number(stock.currentPrice) || 0) * (Number(stock.quantity) || 0);
+      const k = tickerKey(stock.ticker, stock.currency);
+      const eff = Number.isFinite(tickerPrices[k]) ? tickerPrices[k] : Number(stock.currentPrice) || 0;
+      const currentValue = eff * (Number(stock.quantity) || 0);
       return sum + (stock.currency === 'USD' ? currentValue * rate : currentValue);
     }, 0);
   };
@@ -409,7 +442,9 @@ export function StockPortfolio() {
       for (const stock of account.stocks) {
         const t = normalizeTicker(stock.ticker);
         const buyCost = (Number(stock.avgPrice) || 0) * (Number(stock.quantity) || 0);
-        const currentValue = (Number(stock.currentPrice) || 0) * (Number(stock.quantity) || 0);
+        const k = tickerKey(stock.ticker, stock.currency);
+        const eff = Number.isFinite(tickerPrices[k]) ? tickerPrices[k] : Number(stock.currentPrice) || 0;
+        const currentValue = eff * (Number(stock.quantity) || 0);
 
         const buyCostKRW = stock.currency === 'USD' ? buyCost * rate : buyCost;
         const currentValueKRW = stock.currency === 'USD' ? currentValue * rate : currentValue;
@@ -437,7 +472,7 @@ export function StockPortfolio() {
       .sort((a, b) => b.buyCostKRW - a.buyCostKRW);
 
     return items;
-  }, [data.accounts, data.exchangeRate]);
+  }, [data.accounts, data.exchangeRate, tickerPrices]);
 
   const totalPortfolioBuyCostKRW = useMemo(() => {
     const rate = Number(data.exchangeRate) || 0;
@@ -451,32 +486,100 @@ export function StockPortfolio() {
     return total;
   }, [data.accounts, data.exchangeRate]);
 
+  const portfolioTickerKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const acc of data.accounts) {
+      for (const st of acc.stocks) {
+        const t = normalizeTicker(st.ticker);
+        if (!t || t === '티커명') continue;
+        s.add(tickerKey(t, st.currency));
+      }
+    }
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }, [data.accounts]);
+
+  const holdingsByTickerKey = useMemo(() => {
+    const grouped: Record<
+      string,
+      {
+        key: string;
+        ticker: string;
+        currency: 'KRW' | 'USD';
+        totalQty: number;
+        totalCost: number;
+      }
+    > = {};
+
+    for (const acc of data.accounts) {
+      for (const st of acc.stocks) {
+        const t = normalizeTicker(st.ticker);
+        if (!t || t === '티커명') continue;
+        const k = tickerKey(t, st.currency);
+        if (!grouped[k]) {
+          grouped[k] = { key: k, ticker: t, currency: st.currency, totalQty: 0, totalCost: 0 };
+        }
+        const q = Number(st.quantity) || 0;
+        const a = Number(st.avgPrice) || 0;
+        grouped[k].totalQty += q;
+        grouped[k].totalCost += q * a;
+      }
+    }
+
+    return Object.values(grouped)
+      .map((g) => ({
+        ...g,
+        avgPrice: g.totalQty > 0 ? round2(g.totalCost / g.totalQty) : 0,
+        currentPrice: Number.isFinite(tickerPrices[g.key]) ? tickerPrices[g.key] : undefined,
+      }))
+      .sort((a, b) => a.ticker.localeCompare(b.ticker));
+  }, [data.accounts, tickerPrices]);
+
+  // 물타기 계산기
+  const [avgDownKey, setAvgDownKey] = useState<string>('');
+  const [avgDownAvg, setAvgDownAvg] = useState<number>(0);
+  const [avgDownQty, setAvgDownQty] = useState<number>(0);
+  const [avgDownCur, setAvgDownCur] = useState<number>(0);
+  const [avgDownAddQty, setAvgDownAddQty] = useState<number>(0);
+
   const updateMonthlySales = (month: number, sales: number) => {
     setMonthlySales(
       monthlySales.map((item) => (item.month === month ? { ...item, sales } : item))
     );
   };
 
-  // ✅ 웜톤 파스텔(눈 편한) 차트 컬러
+  const updateTickerPrice = (key: string, raw: string) => {
+    const v = raw.trim();
+    setTickerPrices((prev) => {
+      const next: TickerPriceMap = { ...prev };
+      if (v === '' || Number.isNaN(Number(v))) {
+        delete next[key];
+      } else {
+        next[key] = Number(v);
+      }
+      return next;
+    });
+  };
+
+  // ✅ 저채도 웜톤 파스텔(눈 편한) 차트 컬러
   // 파란 계열은 UI 전체 톤에서 제외(단, 손익(-) 표시는 별도 규칙으로 파스텔 블루 유지)
   const COLORS = [
-    '#fda4af', // rose-300
-    '#fdba74', // amber-300
-    '#f9a8d4', // pink-300
-    '#c4b5fd', // violet-300(연한 보라)
-    '#fde68a', // amber-200
-    '#fecdd3', // rose-200
-    '#fed7aa', // orange-200
-    '#bbf7d0', // green-200
-    '#ddd6fe', // violet-200
-    '#fbcfe8', // pink-200
-    '#d1fae5', // emerald-100
-    '#e7e5e4', // stone-200
+    '#e9c7c1', // muted rose
+    '#edd8b6', // muted amber
+    '#e6d3e9', // muted lilac
+    '#d9e4dd', // muted sage
+    '#eadfd6', // muted sand
+    '#e7d0c8',
+    '#efe3d6',
+    '#d8e0da',
+    '#e2d7e6',
+    '#e9e0d8',
+    '#dfd9d6',
+    '#f1ebe7',
   ];
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3">
-        <TrendingUp className="w-8 h-8 text-rose-400" />
+        <TrendingUp className="w-8 h-8 text-rose-300" />
         <h1 className="text-2xl">주식 포트폴리오</h1>
       </div>
 
@@ -502,6 +605,66 @@ export function StockPortfolio() {
             * 환율이 0이면, 달러(USD) 종목의 원화 계산/비중 그래프가 이상하게 나올 수 있어요.
           </div>
         )}
+      </Card>
+
+      {/* ✅ 공통(티커별) 현재가 입력 */}
+      <Card className="p-4 bg-white shadow-md rounded-xl border">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Settings className="w-5 h-5 text-slate-500" />
+            <span className="font-semibold">공통 현재가 (티커별)</span>
+          </div>
+          <div className="text-xs text-gray-500">
+            여기서 입력하면, 동일 티커가 여러 계좌에 있어도 손익/손익률이 자동 계산돼요.
+          </div>
+        </div>
+
+        {holdingsByTickerKey.length === 0 ? (
+          <div className="mt-3 text-sm text-gray-400">보유 종목이 없습니다</div>
+        ) : (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {holdingsByTickerKey.map((g) => {
+              const has = Number.isFinite(tickerPrices[g.key]);
+              return (
+                <div
+                  key={g.key}
+                  className="flex items-center justify-between gap-3 rounded-xl border bg-gray-50 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <div className="font-bold truncate">{g.ticker}</div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border text-gray-600">
+                        {g.currency}
+                      </span>
+                      {has && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 border border-amber-100 text-amber-700">
+                          적용
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-gray-500 truncate">
+                      보유 {fmt0(g.totalQty)}주 · 평단 {fmtMoney(g.avgPrice, g.currency)}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={has ? (tickerPrices[g.key] as number) : ''}
+                      onChange={(e) => updateTickerPrice(g.key, e.target.value)}
+                      className="w-28 h-9 text-right"
+                      placeholder="현재가"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-2 text-xs text-gray-500">
+          * 공통 현재가를 비우면(삭제) 기존 종목별 현재가 입력값이 다시 사용돼요.
+        </div>
       </Card>
 
       {/* 자산 현황 요약 */}
@@ -592,6 +755,9 @@ export function StockPortfolio() {
                   {account.stocks.map((stock) => {
                     const metrics = getStockMetrics(stock);
                     const isUSD = stock.currency === 'USD';
+                    const tk = tickerKey(stock.ticker, stock.currency);
+                    const hasGlobal = Number.isFinite(tickerPrices[tk]);
+                    const shownCurrent = hasGlobal ? (tickerPrices[tk] as number) : stock.currentPrice;
 
                     return (
                       <tr key={stock.id} className="border-b border-gray-100 hover:bg-gray-50">
@@ -634,28 +800,35 @@ export function StockPortfolio() {
                             type="number"
                             value={stock.quantity}
                             onChange={(e) => updateStock(account.id, stock.id, { quantity: Number(e.target.value) })}
-                            className="w-24 text-center"
+                            className="w-24 text-center border-transparent bg-transparent shadow-none focus-visible:ring-0 focus-visible:border-transparent"
                           />
                         </td>
 
                         <td className="p-2 text-center">
                           <Input
                             type="number"
-                            value={stock.avgPrice}
-                            onChange={(e) => updateStock(account.id, stock.id, { avgPrice: Number(e.target.value) })}
-                            className="w-28 text-center"
+                            value={round2(Number(stock.avgPrice) || 0)}
+                            onChange={(e) => updateStock(account.id, stock.id, { avgPrice: round2(Number(e.target.value)) })}
+                            className="w-28 text-center border-transparent bg-transparent shadow-none focus-visible:ring-0 focus-visible:border-transparent"
                           />
                         </td>
 
                         <td className="p-2 text-center">
                           <Input
                             type="number"
-                            value={stock.currentPrice}
-                            onChange={(e) =>
-                              updateStock(account.id, stock.id, { currentPrice: Number(e.target.value) })
-                            }
+                            value={shownCurrent}
+                            onChange={(e) => {
+                              if (hasGlobal) {
+                                updateTickerPrice(tk, e.target.value);
+                              } else {
+                                updateStock(account.id, stock.id, { currentPrice: Number(e.target.value) });
+                              }
+                            }}
                             className="w-28 text-center"
                           />
+                          {hasGlobal && (
+                            <div className="mt-1 text-[10px] text-gray-400">공통 시세 적용</div>
+                          )}
                         </td>
 
                         <td className="p-2 text-center">
@@ -668,7 +841,7 @@ export function StockPortfolio() {
                         </td>
 
                         <td className="p-2 text-center font-medium">
-                          <span className={metrics.targetProfitLossPercent >= 0 ? 'text-rose-500/80' : 'text-sky-600/80'}>
+                          <span className={metrics.targetProfitLossPercent >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}>
                             {fmtPct(metrics.targetProfitLossPercent)}
                           </span>
                         </td>
@@ -682,7 +855,7 @@ export function StockPortfolio() {
                         </td>
 
                         <td className="p-2 text-right">
-                          <div className={metrics.profitLoss >= 0 ? 'text-rose-500/80 font-semibold' : 'text-sky-600/80 font-semibold'}>
+                          <div className={metrics.profitLoss >= 0 ? 'text-rose-400/80 font-semibold' : 'text-sky-500/80 font-semibold'}>
                             {isUSD ? '$ ' + fmt2(metrics.profitLoss) : '₩ ' + fmt0(metrics.profitLoss)}
                           </div>
                           {isUSD && (
@@ -690,7 +863,7 @@ export function StockPortfolio() {
                           )}
                         </td>
 
-                        <td className={`p-2 text-right font-bold ${metrics.profitLossPercent >= 0 ? 'text-rose-500/80' : 'text-sky-600/80'}`}>
+                        <td className={`p-2 text-right font-bold ${metrics.profitLossPercent >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}`}>
                           {fmtPct(metrics.profitLossPercent)}
                         </td>
 
@@ -974,7 +1147,6 @@ export function StockPortfolio() {
                         ))}
                       </Pie>
                       <Tooltip formatter={(value: any) => `${Number(value).toFixed(2)}%`} />
-                      <Legend />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -1008,14 +1180,14 @@ export function StockPortfolio() {
                       </div>
                       <div className="p-2 rounded-lg bg-white border">
                         <div className="text-xs text-gray-500">손익(원)</div>
-                        <div className={"font-bold " + (g.profitLossKRW >= 0 ? 'text-rose-500/80' : 'text-sky-600/80')}
+                        <div className={"font-bold " + (g.profitLossKRW >= 0 ? 'text-rose-400/80' : 'text-sky-500/80')}
                         >
                           {fmt0(g.profitLossKRW)}
                         </div>
                       </div>
                       <div className="p-2 rounded-lg bg-white border">
                         <div className="text-xs text-gray-500">손익률</div>
-                        <div className={"font-bold " + (g.profitLossPct >= 0 ? 'text-rose-500/80' : 'text-sky-600/80')}
+                        <div className={"font-bold " + (g.profitLossPct >= 0 ? 'text-rose-400/80' : 'text-sky-500/80')}
                         >
                           {fmtPct(g.profitLossPct)}
                         </div>
@@ -1027,6 +1199,131 @@ export function StockPortfolio() {
             </div>
           </div>
         )}
+
+        {/* 물타기(평단 낮추기) 계산기 */}
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold mb-3">물타기 프로그램 (평단 낮추기 계산기)</h3>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="p-4 rounded-2xl border bg-gray-50">
+              <div className="text-sm text-gray-600">입력</div>
+
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">티커(선택)</div>
+                  <select
+                    value={avgDownKey}
+                    onChange={(e) => {
+                      const k = e.target.value;
+                      setAvgDownKey(k);
+                      const found = holdingsByTickerKey.find((x) => x.key === k);
+                      if (found) {
+                        setAvgDownAvg(found.avgPrice || 0);
+                        setAvgDownQty(found.totalQty || 0);
+                        setAvgDownCur((found.currentPrice ?? 0) as number);
+                      }
+                    }}
+                    className="w-full h-9 rounded-md border px-3 bg-white text-sm"
+                  >
+                    <option value="">직접 입력</option>
+                    {holdingsByTickerKey.map((g) => (
+                      <option key={g.key} value={g.key}>
+                        {g.ticker} ({g.currency})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">현재가</div>
+                  <Input
+                    type="number"
+                    value={avgDownCur}
+                    onChange={(e) => setAvgDownCur(Number(e.target.value))}
+                    className="h-9 text-right"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">현재 평단가</div>
+                  <Input
+                    type="number"
+                    value={avgDownAvg}
+                    onChange={(e) => setAvgDownAvg(round2(Number(e.target.value)))}
+                    className="h-9 text-right"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">현재 수량</div>
+                  <Input
+                    type="number"
+                    value={avgDownQty}
+                    onChange={(e) => setAvgDownQty(Number(e.target.value))}
+                    className="h-9 text-right"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <div className="text-xs text-gray-500 mb-1">물탈 주식 수(추가 매수 수량)</div>
+                  <Input
+                    type="number"
+                    value={avgDownAddQty}
+                    onChange={(e) => setAvgDownAddQty(Number(e.target.value))}
+                    className="h-9 text-right"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 text-xs text-gray-500">
+                계산식: (평단×수량 + 현재가×추가수량) ÷ (수량+추가수량)
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl border bg-white">
+              <div className="text-sm text-gray-600">결과</div>
+
+              {(() => {
+                const baseQty = Number(avgDownQty) || 0;
+                const addQty = Number(avgDownAddQty) || 0;
+                const baseAvg = Number(avgDownAvg) || 0;
+                const cur = Number(avgDownCur) || 0;
+                const newQty = baseQty + addQty;
+                const newAvg = newQty > 0 ? round2((baseAvg * baseQty + cur * addQty) / newQty) : 0;
+                const drop = round2(baseAvg - newAvg);
+                const dropPct = baseAvg > 0 ? round2((drop / baseAvg) * 100) : 0;
+
+                const dropTone = drop >= 0 ? 'text-emerald-700' : 'text-rose-400/80';
+
+                return (
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-xl border bg-gray-50">
+                      <div className="text-xs text-gray-500">새 평단가</div>
+                      <div className="text-lg font-bold mt-1">{fmt2(newAvg)}</div>
+                    </div>
+                    <div className="p-3 rounded-xl border bg-gray-50">
+                      <div className="text-xs text-gray-500">평단 변화</div>
+                      <div className={`text-lg font-bold mt-1 ${dropTone}`}>{fmt2(drop)}</div>
+                      <div className="text-xs text-gray-500 mt-1">({fmt2(dropPct)}%)</div>
+                    </div>
+                    <div className="p-3 rounded-xl border bg-gray-50">
+                      <div className="text-xs text-gray-500">총 수량</div>
+                      <div className="text-lg font-bold mt-1">{fmt2(newQty)}</div>
+                    </div>
+                    <div className="p-3 rounded-xl border bg-gray-50">
+                      <div className="text-xs text-gray-500">추가 매수금</div>
+                      <div className="text-lg font-bold mt-1">{fmt2(cur * addQty)}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
       </Card>
     </div>
   );
