@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Plus,
   Trash2,
@@ -9,6 +9,8 @@ import {
   Settings,
   Wallet,
   CreditCard,
+  RotateCcw,
+  RotateCw,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -37,6 +39,22 @@ interface SellRecord {
   avgPriceAtSell?: number;
 }
 
+// ✅ 매도 원장(레저)
+// - 종목을 삭제하더라도 월별 매도 현황(실현손익)이 유지되도록
+//   매도 기록을 계좌/종목과 별개로 보관한다.
+interface SellLedgerEntry {
+  id: string; // ledger entry id
+  sourceRecordId: string; // SellRecord.id
+  accountId: string;
+  // 종목을 삭제해도 유지해야 하므로 ticker/currency는 레저에 독립 보관
+  ticker: string;
+  currency: 'KRW' | 'USD';
+  date: string; // YYYY-MM-DD
+  quantity: number;
+  sellPrice: number;
+  avgPriceAtSell: number;
+}
+
 interface Stock {
   id: string;
   ticker: string;
@@ -59,6 +77,8 @@ interface StockAccount {
 interface PortfolioData {
   accounts: StockAccount[];
   exchangeRate: number; // 원/달러
+  // ✅ 종목 삭제와 무관하게 유지되는 매도 원장
+  sellLedger: SellLedgerEntry[];
 }
 
 const normalizeTicker = (t: string) => (t || '').trim().toUpperCase();
@@ -116,6 +136,58 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
   });
 
   const exchangeRate = Number(raw?.exchangeRate) || 1350;
+
+  // ✅ sellLedger: 있으면 그대로, 없으면 (기존 sellRecords 기반으로) 자동 생성
+  const rawLedger = Array.isArray(raw?.sellLedger) ? raw.sellLedger : null;
+  const sellLedger: SellLedgerEntry[] = rawLedger
+    ? rawLedger
+        .filter((x: any) => x && typeof x === 'object')
+        .map((x: any, i: number) => ({
+          id: String(x?.id ?? `L-${i + 1}`),
+          sourceRecordId: String(x?.sourceRecordId ?? ''),
+          accountId: String(x?.accountId ?? ''),
+          ticker: normalizeTicker(String(x?.ticker ?? '')),
+          currency: (x?.currency === 'KRW' ? 'KRW' : 'USD') as 'KRW' | 'USD',
+          date: String(x?.date ?? ''),
+          quantity: Number(x?.quantity) || 0,
+          sellPrice: Number(x?.sellPrice) || 0,
+          avgPriceAtSell: Number(x?.avgPriceAtSell) || 0,
+        }))
+    : (() => {
+        const entries: SellLedgerEntry[] = [];
+        for (const acc of accounts) {
+          for (const st of acc.stocks) {
+            const t = normalizeTicker(st.ticker);
+            const records = Array.isArray(st.sellRecords) ? st.sellRecords : [];
+            for (const r of records) {
+              const sourceId = String((r as any).id ?? '');
+              entries.push({
+                id: `L-${acc.id}-${sourceId || Math.random().toString(16).slice(2)}`,
+                sourceRecordId: sourceId,
+                accountId: String(acc.id),
+                ticker: t,
+                currency: st.currency,
+                date: String((r as any).date ?? ''),
+                quantity: Number((r as any).quantity) || 0,
+                sellPrice: Number((r as any).price) || 0,
+                avgPriceAtSell: Number((r as any).avgPriceAtSell) || Number(st.avgPrice) || 0,
+              });
+            }
+          }
+        }
+        return entries;
+      })();
+
+  // 중복 sourceRecordId 제거(최초 1개만 유지)
+  const deduped: SellLedgerEntry[] = [];
+  const seen = new Set<string>();
+  for (const e of sellLedger) {
+    const key = e.sourceRecordId ? `${e.accountId}::${e.sourceRecordId}` : `${e.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(e);
+  }
+
   return {
     accounts:
       accounts.length > 0
@@ -125,6 +197,7 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
             { id: '2', name: '2번 계좌', stocks: [] },
           ],
     exchangeRate,
+    sellLedger: deduped,
   };
 };
 
@@ -161,6 +234,7 @@ export function StockPortfolio() {
         { id: '2', name: '2번 계좌', stocks: [] },
       ],
       exchangeRate: 1350,
+      sellLedger: [],
     };
   });
 
@@ -193,6 +267,104 @@ export function StockPortfolio() {
     localStorage.setItem('stockTickerPrices', JSON.stringify(tickerPrices));
   }, [tickerPrices]);
 
+  // =====================
+  // Undo / Redo
+  // =====================
+  type Snapshot = { data: PortfolioData; tickerPrices: TickerPriceMap };
+  const deepClone = <T,>(v: T): T => {
+    try {
+      // @ts-ignore
+      return structuredClone(v);
+    } catch {
+      return JSON.parse(JSON.stringify(v));
+    }
+  };
+
+  const [undoStack, setUndoStack] = useState<Snapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<Snapshot[]>([]);
+  const lastEditAtRef = useRef<number>(0);
+
+  const pushUndo = (mode: 'edit' | 'action') => {
+    const snap: Snapshot = { data: deepClone(data), tickerPrices: deepClone(tickerPrices) };
+    setRedoStack([]);
+    setUndoStack((prev) => {
+      const now = Date.now();
+      // 입력 중(연속 수정)은 한 번만 저장해서 "한 번에 되돌리기"가 되도록(coalesce)
+      if (mode === 'edit' && now - lastEditAtRef.current < 800 && prev.length > 0) {
+        lastEditAtRef.current = now;
+        return prev;
+      }
+      lastEditAtRef.current = now;
+      const next = [...prev, snap];
+      return next.length > 50 ? next.slice(next.length - 50) : next;
+    });
+  };
+
+  const doUndo = () => {
+    setUndoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const current: Snapshot = { data: deepClone(data), tickerPrices: deepClone(tickerPrices) };
+      const last = prev[prev.length - 1];
+      setRedoStack((r) => {
+        const next = [...r, current];
+        return next.length > 50 ? next.slice(next.length - 50) : next;
+      });
+      setData(last.data);
+      setTickerPrices(last.tickerPrices);
+      setLoadOk(true);
+      return prev.slice(0, -1);
+    });
+  };
+
+  const doRedo = () => {
+    setRedoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const current: Snapshot = { data: deepClone(data), tickerPrices: deepClone(tickerPrices) };
+      const last = prev[prev.length - 1];
+      setUndoStack((u) => {
+        const next = [...u, current];
+        return next.length > 50 ? next.slice(next.length - 50) : next;
+      });
+      setData(last.data);
+      setTickerPrices(last.tickerPrices);
+      setLoadOk(true);
+      return prev.slice(0, -1);
+    });
+  };
+
+  useEffect(() => {
+    const isEditable = (el: Element | null) => {
+      if (!el) return false;
+      const tag = (el as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if ((el as HTMLElement).isContentEditable) return true;
+      return false;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (!ctrl) return;
+      if (isEditable(document.activeElement)) return;
+
+      const k = String(e.key || '').toLowerCase();
+      if (k === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        doUndo();
+      } else if (k === 'y' || (k === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        doRedo();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [data, tickerPrices]);
+
+  const setDataWithUndo = (mode: 'edit' | 'action', updater: (prev: PortfolioData) => PortfolioData) => {
+    pushUndo(mode);
+    setData((prev) => updater(prev));
+  };
+
   // ✅ 전역 환율(주식/주식대기표/자산추이에서 함께 씀)
   useEffect(() => {
     const rate = data.exchangeRate || 0;
@@ -214,40 +386,36 @@ export function StockPortfolio() {
     }
   }, [data, loadOk]);
   const updateExchangeRate = (rate: number) => {
-    setData({
-      ...data,
-      exchangeRate: rate,
-    });
+    setDataWithUndo('edit', (prev) => ({ ...prev, exchangeRate: rate }));
   };
 
   const addAccount = () => {
-    const newAccount: StockAccount = {
-      id: Date.now().toString(),
-      name: `${data.accounts.length + 1}번 계좌`,
-      stocks: [],
-    };
-    setData({
-      ...data,
-      accounts: [...data.accounts, newAccount],
+    setDataWithUndo('action', (prev) => {
+      const newAccount: StockAccount = {
+        id: Date.now().toString(),
+        name: `${prev.accounts.length + 1}번 계좌`,
+        stocks: [],
+      };
+      return { ...prev, accounts: [...prev.accounts, newAccount] };
     });
   };
 
   const updateAccountName = (accountId: string, name: string) => {
-    setData({
-      ...data,
-      accounts: data.accounts.map((account) =>
+    setDataWithUndo('edit', (prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) =>
         account.id === accountId ? { ...account, name } : account
       ),
-    });
+    }));
   };
 
   const deleteAccount = (accountId: string) => {
     if (data.accounts.length <= 1) return;
     if (!confirm('이 계좌를 삭제할까요?')) return;
-    setData({
-      ...data,
-      accounts: data.accounts.filter((account) => account.id !== accountId),
-    });
+    setDataWithUndo('action', (prev) => ({
+      ...prev,
+      accounts: prev.accounts.filter((account) => account.id !== accountId),
+    }));
   };
 
   const addStock = (accountId: string) => {
@@ -264,31 +432,33 @@ export function StockPortfolio() {
       isExpanded: false,
     };
 
-    setData({
-      ...data,
-      accounts: data.accounts.map((account) =>
+    setDataWithUndo('action', (prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) =>
         account.id === accountId
           ? { ...account, stocks: [...account.stocks, newStock] }
           : account
       ),
-    });
+    }));
   };
 
   const deleteStock = (accountId: string, stockId: string) => {
-    setData({
-      ...data,
-      accounts: data.accounts.map((account) =>
+    if (!confirm('이 티커(종목)를 삭제할까요?\n*전량 매도된 티커를 삭제해도 월별 매도 현황(실현손익)은 유지됩니다.')) return;
+    setDataWithUndo('action', (prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) =>
         account.id === accountId
           ? { ...account, stocks: account.stocks.filter((stock) => stock.id !== stockId) }
           : account
       ),
-    });
+      // ✅ sellLedger는 삭제하지 않음 (월별 매도 현황 유지)
+    }));
   };
 
-  const updateStock = (accountId: string, stockId: string, updates: Partial<Stock>) => {
-    setData({
-      ...data,
-      accounts: data.accounts.map((account) =>
+  const updateStock = (accountId: string, stockId: string, updates: Partial<Stock>, mode: 'edit' | 'action' = 'edit') => {
+    setDataWithUndo(mode, (prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) =>
         account.id === accountId
           ? {
               ...account,
@@ -298,7 +468,7 @@ export function StockPortfolio() {
             }
           : account
       ),
-    });
+    }));
   };
 
   const toggleExpand = (accountId: string, stockId: string) => {
@@ -322,7 +492,7 @@ export function StockPortfolio() {
 
     updateStock(accountId, stockId, {
       buyRecords: [...stock.buyRecords, newRecord],
-    });
+    }, 'action');
   };
 
   const updateBuyRecord = (accountId: string, stockId: string, recordId: string, updates: Partial<BuyRecord>) => {
@@ -344,7 +514,7 @@ export function StockPortfolio() {
 
     updateStock(accountId, stockId, {
       buyRecords: stock.buyRecords.filter((record) => record.id !== recordId),
-    });
+    }, 'action');
   };
 
   // 매수기록 -> 수량/평단 반영
@@ -371,79 +541,199 @@ export function StockPortfolio() {
     updateStock(accountId, stockId, {
       quantity: totalQty,
       avgPrice,
-    });
+    }, 'action');
   };
 
   const addSellRecord = (accountId: string, stockId: string) => {
-    const account = data.accounts.find((acc) => acc.id === accountId);
-    const stock = account?.stocks.find((s) => s.id === stockId);
-    if (!stock) return;
+    const recordId = Date.now().toString();
+    const today = new Date().toISOString().split('T')[0];
 
-    const newRecord: SellRecord = {
-      id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
-      quantity: 0,
-      price: 0,
-      avgPriceAtSell: round2(Number(stock.avgPrice) || 0),
-    };
+    setDataWithUndo('action', (prev) => {
+      let ledgerEntry: SellLedgerEntry | null = null;
 
-    updateStock(accountId, stockId, {
-      sellRecords: [...stock.sellRecords, newRecord],
+      const accounts = prev.accounts.map((acc) => {
+        if (acc.id !== accountId) return acc;
+        return {
+          ...acc,
+          stocks: acc.stocks.map((st) => {
+            if (st.id !== stockId) return st;
+            const newRecord: SellRecord = {
+              id: recordId,
+              date: today,
+              quantity: 0,
+              price: 0,
+              avgPriceAtSell: round2(Number(st.avgPrice) || 0),
+            };
+
+            ledgerEntry = {
+              id: `L-${accountId}-${recordId}`,
+              sourceRecordId: recordId,
+              accountId,
+              ticker: normalizeTicker(st.ticker),
+              currency: st.currency,
+              date: newRecord.date,
+              quantity: newRecord.quantity,
+              sellPrice: newRecord.price,
+              avgPriceAtSell: Number(newRecord.avgPriceAtSell) || 0,
+            };
+
+            return {
+              ...st,
+              sellRecords: [...(Array.isArray(st.sellRecords) ? st.sellRecords : []), newRecord],
+            };
+          }),
+        };
+      });
+
+      const nextLedger = ledgerEntry
+        ? [...(Array.isArray(prev.sellLedger) ? prev.sellLedger : []).filter((e) => !(e.accountId === accountId && e.sourceRecordId === recordId)), ledgerEntry]
+        : prev.sellLedger;
+
+      return { ...prev, accounts, sellLedger: nextLedger };
     });
   };
 
   const updateSellRecord = (accountId: string, stockId: string, recordId: string, updates: Partial<SellRecord>) => {
-    const account = data.accounts.find((acc) => acc.id === accountId);
-    const stock = account?.stocks.find((s) => s.id === stockId);
-    if (!stock) return;
+    setDataWithUndo('edit', (prev) => {
+      let nextLedgerEntry: SellLedgerEntry | null = null;
+      let nextTicker = '';
+      let nextCurrency: 'KRW' | 'USD' = 'USD';
 
-    updateStock(accountId, stockId, {
-      sellRecords: stock.sellRecords.map((record) =>
-        record.id === recordId ? { ...record, ...updates } : record
-      ),
+      const accounts = prev.accounts.map((acc) => {
+        if (acc.id !== accountId) return acc;
+        return {
+          ...acc,
+          stocks: acc.stocks.map((st) => {
+            if (st.id !== stockId) return st;
+            nextTicker = normalizeTicker(st.ticker);
+            nextCurrency = st.currency;
+            const nextSellRecords = (Array.isArray(st.sellRecords) ? st.sellRecords : []).map((r) =>
+              r.id === recordId
+                ? {
+                    ...r,
+                    ...updates,
+                    // avgPriceAtSell가 비면 현재 평단으로 보정(과거 데이터 호환)
+                    avgPriceAtSell:
+                      Number((updates as any).avgPriceAtSell) || Number((r as any).avgPriceAtSell) || round2(Number(st.avgPrice) || 0),
+                  }
+                : r
+            );
+
+            const updated = nextSellRecords.find((r) => r.id === recordId);
+            if (updated) {
+              nextLedgerEntry = {
+                id: `L-${accountId}-${recordId}`,
+                sourceRecordId: recordId,
+                accountId,
+                ticker: nextTicker,
+                currency: nextCurrency,
+                date: String((updated as any).date ?? ''),
+                quantity: Number((updated as any).quantity) || 0,
+                sellPrice: Number((updated as any).price) || 0,
+                avgPriceAtSell: Number((updated as any).avgPriceAtSell) || round2(Number(st.avgPrice) || 0),
+              };
+            }
+
+            return { ...st, sellRecords: nextSellRecords };
+          }),
+        };
+      });
+
+      const prevLedger = Array.isArray(prev.sellLedger) ? prev.sellLedger : [];
+      const nextLedger = nextLedgerEntry
+        ? [...prevLedger.filter((e) => !(e.accountId === accountId && e.sourceRecordId === recordId)), nextLedgerEntry]
+        : prevLedger;
+
+      return { ...prev, accounts, sellLedger: nextLedger };
     });
   };
 
   const deleteSellRecord = (accountId: string, stockId: string, recordId: string) => {
-    const account = data.accounts.find((acc) => acc.id === accountId);
-    const stock = account?.stocks.find((s) => s.id === stockId);
-    if (!stock) return;
-
-    updateStock(accountId, stockId, {
-      sellRecords: stock.sellRecords.filter((record) => record.id !== recordId),
-    });
+    if (!confirm('이 매도 기록을 삭제할까요? (월별 매도 현황에서도 함께 빠져요)')) return;
+    setDataWithUndo('action', (prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((acc) =>
+        acc.id === accountId
+          ? {
+              ...acc,
+              stocks: acc.stocks.map((st) =>
+                st.id === stockId
+                  ? {
+                      ...st,
+                      sellRecords: (Array.isArray(st.sellRecords) ? st.sellRecords : []).filter((r) => r.id !== recordId),
+                    }
+                  : st
+              ),
+            }
+          : acc
+      ),
+      sellLedger: (Array.isArray(prev.sellLedger) ? prev.sellLedger : []).filter((e) => !(e.accountId === accountId && e.sourceRecordId === recordId)),
+    }));
   };
 
 
   // 매도기록 -> 수량 반영(평단 유지)
   // + 매도 손익 계산을 위해, 각 매도기록에 매도 시점 평단(avgPriceAtSell)을 스냅샷으로 저장한다.
   const applySellRecordsToStock = (accountId: string, stockId: string) => {
-    const account = data.accounts.find((acc) => acc.id === accountId);
-    const stock = account?.stocks.find((s) => s.id === stockId);
-    if (!stock) return;
+    setDataWithUndo('action', (prev) => {
+      let didApply = false;
+      let nextLedger = Array.isArray(prev.sellLedger) ? [...prev.sellLedger] : [];
 
-    const sr = Array.isArray(stock.sellRecords) ? stock.sellRecords : [];
+      const accounts = prev.accounts.map((acc) => {
+        if (acc.id !== accountId) return acc;
+        return {
+          ...acc,
+          stocks: acc.stocks.map((st) => {
+            if (st.id !== stockId) return st;
 
-    // avgPriceAtSell 스냅샷 보정 (과거 데이터 호환)
-    const fixedSellRecords = sr.map((r) => ({
-      ...r,
-      avgPriceAtSell: Number((r as any).avgPriceAtSell) || round2(Number(stock.avgPrice) || 0),
-    }));
+            const sr = Array.isArray(st.sellRecords) ? st.sellRecords : [];
+            const fixedSellRecords = sr.map((r) => ({
+              ...r,
+              avgPriceAtSell: Number((r as any).avgPriceAtSell) || round2(Number(st.avgPrice) || 0),
+            }));
 
-    const sellQty = fixedSellRecords.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+            const sellQty = fixedSellRecords.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+            if (sellQty <= 0) {
+              return st;
+            }
 
-    if (sellQty <= 0) {
-      alert('매도기록 수량이 0이에요. 수량 반영을 취소했어요.');
-      return;
-    }
+            // ✅ 레저 동기화(삭제해도 월별 매도 현황 유지)
+            for (const r of fixedSellRecords) {
+              const rid = String((r as any).id ?? '');
+              const entry: SellLedgerEntry = {
+                id: `L-${accountId}-${rid}`,
+                sourceRecordId: rid,
+                accountId,
+                ticker: normalizeTicker(st.ticker),
+                currency: st.currency,
+                date: String((r as any).date ?? ''),
+                quantity: Number((r as any).quantity) || 0,
+                sellPrice: Number((r as any).price) || 0,
+                avgPriceAtSell: Number((r as any).avgPriceAtSell) || round2(Number(st.avgPrice) || 0),
+              };
+              nextLedger = [...nextLedger.filter((e) => !(e.accountId === accountId && e.sourceRecordId === rid)), entry];
+            }
 
-    const currentQty = Number(stock.quantity) || 0;
-    const nextQty = Math.max(0, currentQty - sellQty);
+            didApply = true;
+            const currentQty = Number(st.quantity) || 0;
+            const nextQty = Math.max(0, currentQty - sellQty);
 
-    updateStock(accountId, stockId, {
-      quantity: nextQty,
-      sellRecords: fixedSellRecords,
-      // avgPrice는 유지
+            return {
+              ...st,
+              quantity: nextQty,
+              sellRecords: fixedSellRecords,
+            };
+          }),
+        };
+      });
+
+      if (!didApply) {
+        // 매도 수량 0이면 원본 유지
+        alert('매도기록 수량이 0이에요. 수량 반영을 취소했어요.');
+        return prev;
+      }
+
+      return { ...prev, accounts, sellLedger: nextLedger };
     });
   };
 
@@ -589,7 +879,7 @@ export function StockPortfolio() {
       }
     }
     return total;
-  }, [data.accounts, data.exchangeRate]);
+  }, [data.sellLedger, data.exchangeRate]);
 
   const portfolioTickerKeys = useMemo(() => {
     const s = new Set<string>();
@@ -653,30 +943,27 @@ export function StockPortfolio() {
     const rate = Number(data.exchangeRate) || 0;
     const arr = Array.from({ length: 12 }, () => 0);
 
-    for (const account of data.accounts) {
-      for (const stock of account.stocks) {
-        const records = Array.isArray(stock.sellRecords) ? stock.sellRecords : [];
-        for (const r of records) {
-          const date = String((r as any).date || '');
-          const m = /^\d{4}-\d{2}-\d{2}$/.test(date) ? Number(date.slice(5, 7)) : NaN;
-          if (!Number.isFinite(m) || m < 1 || m > 12) continue;
+    const ledger = Array.isArray(data.sellLedger) ? data.sellLedger : [];
+    for (const e of ledger) {
+      const date = String((e as any).date || '');
+      const m = /^\d{4}-\d{2}-\d{2}$/.test(date) ? Number(date.slice(5, 7)) : NaN;
+      if (!Number.isFinite(m) || m < 1 || m > 12) continue;
 
-          const qty = Number((r as any).quantity) || 0;
-          const sellPrice = Number((r as any).price) || 0;
-          if (qty === 0) continue;
+      const qty = Number((e as any).quantity) || 0;
+      const sellPrice = Number((e as any).sellPrice) || 0;
+      if (qty === 0) continue;
 
-          const avgAtSell = Number((r as any).avgPriceAtSell) || Number(stock.avgPrice) || 0;
-          const pnl = (sellPrice - avgAtSell) * qty;
-          const pnlKRW = stock.currency === 'USD' ? pnl * rate : pnl;
-          arr[m - 1] += pnlKRW;
-        }
-      }
+      const avgAtSell = Number((e as any).avgPriceAtSell) || 0;
+      const pnl = (sellPrice - avgAtSell) * qty;
+      const pnlKRW = (e as any).currency === 'USD' ? pnl * rate : pnl;
+      arr[m - 1] += pnlKRW;
     }
 
     return arr.map((v, i) => ({ month: i + 1, pnlKRW: v }));
   }, [data.accounts, data.exchangeRate]);
   const updateTickerPrice = (key: string, raw: string) => {
     const v = raw.trim();
+    pushUndo('edit');
     setTickerPrices((prev) => {
       const next: TickerPriceMap = { ...prev };
       if (v === '' || Number.isNaN(Number(v))) {
@@ -729,9 +1016,33 @@ export function StockPortfolio() {
   ];
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
-      <div className="flex items-center gap-3">
-        <TrendingUp className="w-8 h-8 text-rose-300" />
-        <h1 className="text-2xl">주식 포트폴리오</h1>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <TrendingUp className="w-8 h-8 text-rose-300" />
+          <h1 className="text-2xl">주식 포트폴리오</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={doUndo}
+            disabled={undoStack.length === 0}
+            className="gap-2"
+            title="되돌리기 (Ctrl/⌘ + Z)"
+          >
+            <RotateCcw className="w-4 h-4" />
+            되돌리기
+          </Button>
+          <Button
+            variant="outline"
+            onClick={doRedo}
+            disabled={redoStack.length === 0}
+            className="gap-2"
+            title="다시 실행 (Ctrl/⌘ + Shift + Z 또는 Ctrl/⌘ + Y)"
+          >
+            <RotateCw className="w-4 h-4" />
+            다시
+          </Button>
+        </div>
       </div>
 
       {/* 데이터 로드 에러(파싱 실패) 안내 */}
