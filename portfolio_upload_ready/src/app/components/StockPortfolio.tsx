@@ -124,14 +124,30 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
 };
 
 export function StockPortfolio() {
+  // ✅ 로컬 데이터가 깨졌을 때(예: JSON 파싱 실패) 기본값으로 덮어써서
+  // 사용자가 입력해둔 값이 "사라진 것처럼" 보일 수 있어.
+  // - 파싱 성공 시: last_good 백업 저장
+  // - 파싱 실패 시: corrupt_backup에 원본 보관 + 자동 저장으로 덮어쓰기 방지
+  const [loadOk, setLoadOk] = useState(true);
+
   const [data, setData] = useState<PortfolioData>(() => {
     const saved = localStorage.getItem('stockPortfolio');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return sanitizePortfolioData(parsed);
+        const sanitized = sanitizePortfolioData(parsed);
+        try {
+          localStorage.setItem('stockPortfolio__last_good', JSON.stringify(sanitized));
+        } catch {
+          // ignore
+        }
+        return sanitized;
       } catch {
-        // ignore
+        try {
+          localStorage.setItem('stockPortfolio__corrupt_backup__' + new Date().toISOString(), saved);
+        } catch {
+          // ignore
+        }
       }
     }
     return {
@@ -142,6 +158,17 @@ export function StockPortfolio() {
       exchangeRate: 1350,
     };
   });
+
+  useEffect(() => {
+    const saved = localStorage.getItem('stockPortfolio');
+    if (!saved) return;
+    try {
+      JSON.parse(saved);
+      setLoadOk(true);
+    } catch {
+      setLoadOk(false);
+    }
+  }, []);
 
   const [monthlySales, setMonthlySales] = useState<MonthlySalesData[]>(() => {
     const saved = localStorage.getItem('monthlyStockSales');
@@ -183,8 +210,17 @@ export function StockPortfolio() {
   }, [data.exchangeRate]);
 
   useEffect(() => {
+    // 파싱 실패(loadOk=false) 상태에서는 자동 저장으로 기존 값을 덮어쓰지 않음.
+    // 데이터가 깨진 상태에서 "빈 값"을 다시 저장해버리면 복구가 더 어려워져.
+    if (!loadOk) return;
     localStorage.setItem('stockPortfolio', JSON.stringify(data));
-  }, [data]);
+    // last_good 백업도 갱신
+    try {
+      localStorage.setItem('stockPortfolio__last_good', JSON.stringify(data));
+    } catch {
+      // ignore
+    }
+  }, [data, loadOk]);
 
   useEffect(() => {
     localStorage.setItem('monthlyStockSales', JSON.stringify(monthlySales));
@@ -330,13 +366,20 @@ export function StockPortfolio() {
     const stock = account?.stocks.find((s) => s.id === stockId);
     if (!stock) return;
 
-    const totalQty = stock.buyRecords.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
-    const totalCost = stock.buyRecords.reduce(
+    const buyRecords = Array.isArray(stock.buyRecords) ? stock.buyRecords : [];
+
+    const totalQty = buyRecords.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+    const totalCost = buyRecords.reduce(
       (sum, r) => sum + (Number(r.quantity) || 0) * (Number(r.price) || 0),
       0
     );
 
-    const avgPrice = totalQty > 0 ? round2(totalCost / totalQty) : 0;
+    if (totalQty <= 0) {
+      alert('매수기록이 비어있거나 수량이 0이에요. (수량/평단을 0으로 덮어쓰지 않도록) 반영을 취소했어요.');
+      return;
+    }
+
+    const avgPrice = round2(totalCost / totalQty);
 
     updateStock(accountId, stockId, {
       quantity: totalQty,
@@ -380,6 +423,32 @@ export function StockPortfolio() {
 
     updateStock(accountId, stockId, {
       sellRecords: stock.sellRecords.filter((record) => record.id !== recordId),
+    });
+  };
+
+
+  // 매도기록 -> 수량 반영(평단 유지)
+  const applySellRecordsToStock = (accountId: string, stockId: string) => {
+    const account = data.accounts.find((acc) => acc.id === accountId);
+    const stock = account?.stocks.find((s) => s.id === stockId);
+    if (!stock) return;
+
+    const sellQty = (Array.isArray(stock.sellRecords) ? stock.sellRecords : []).reduce(
+      (sum, r) => sum + (Number(r.quantity) || 0),
+      0
+    );
+
+    if (sellQty <= 0) {
+      alert('매도기록 수량이 0이에요. 수량 반영을 취소했어요.');
+      return;
+    }
+
+    const currentQty = Number(stock.quantity) || 0;
+    const nextQty = Math.max(0, currentQty - sellQty);
+
+    updateStock(accountId, stockId, {
+      quantity: nextQty,
+      // avgPrice는 유지
     });
   };
 
@@ -601,6 +670,29 @@ export function StockPortfolio() {
     });
   };
 
+
+  const recoverFromLastGood = () => {
+    const last = localStorage.getItem('stockPortfolio__last_good');
+    if (!last) {
+      alert('복구할 백업이 없어요. (stockPortfolio__last_good 없음)');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(last);
+      const sanitized = sanitizePortfolioData(parsed);
+      setData(sanitized);
+      setLoadOk(true);
+      alert('마지막 정상 데이터로 복구했어요.');
+    } catch {
+      alert('백업 데이터가 깨져있어서 복구에 실패했어요.');
+    }
+  };
+
+  const enableSavingAnyway = () => {
+    if (!confirm('지금 상태에서 저장을 다시 켜면(자동 저장) 현재 화면 값이 저장돼요. 계속할까요?')) return;
+    setLoadOk(true);
+  };
+
   // ✅ 저채도 웜톤 파스텔(눈 편한) 차트 컬러
   // 파란 계열은 UI 전체 톤에서 제외(단, 손익(-) 표시는 별도 규칙으로 파스텔 블루 유지)
   const COLORS = [
@@ -623,6 +715,22 @@ export function StockPortfolio() {
         <TrendingUp className="w-8 h-8 text-rose-300" />
         <h1 className="text-2xl">주식 포트폴리오</h1>
       </div>
+
+      {/* 데이터 로드 에러(파싱 실패) 안내 */}
+      {!loadOk && (
+        <Card className="p-4 rounded-xl border border-rose-100 bg-rose-50">
+          <div className="text-sm font-semibold text-rose-900">데이터 복구 안내</div>
+          <div className="mt-1 text-sm text-rose-800/90 leading-relaxed">
+            브라우저에 저장된 주식 데이터가 깨져서(파싱 실패) 일단 빈 화면으로 열렸어요.
+            <br />
+            <span className="font-semibold">아래 버튼으로 복구</span>를 먼저 해보고, 그래도 안 되면 예전 도메인에서 데이터를 가져와야 할 수 있어요.
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button onClick={recoverFromLastGood} className="bg-rose-600 hover:bg-rose-700 text-white">마지막 정상 데이터로 복구</Button>
+            <Button variant="outline" onClick={enableSavingAnyway}>저장 다시 켜기(초기화 포함)</Button>
+          </div>
+        </Card>
+      )}
 
       {/* 환율 입력 */}
       <Card className="p-4 bg-white shadow-md rounded-xl border">
@@ -1042,9 +1150,14 @@ export function StockPortfolio() {
                       {/* 매도 기록 */}
                       <div className="flex items-center justify-between mt-6 mb-3">
                         <h3 className="text-lg font-semibold">매도기록</h3>
-                        <Button size="sm" onClick={() => addSellRecord(account.id, stock.id)}>
-                          <Plus className="w-4 h-4 mr-1" /> 기록 추가
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => addSellRecord(account.id, stock.id)}>
+                            <Plus className="w-4 h-4 mr-1" /> 기록 추가
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => applySellRecordsToStock(account.id, stock.id)}>
+                            매도기록 → 수량 반영
+                          </Button>
+                        </div>
                       </div>
 
                       <div className="overflow-x-auto">
