@@ -83,12 +83,53 @@ const fmtMoney = (n: number, currency: 'KRW' | 'USD') => (currency === 'KRW' ? f
 
 const fmtPct = (n: number) => fmt2(n) + '%';
 
+// ✅ 과거 버전 localStorage 데이터(필드 누락)로 인해 확장(▼) 클릭 시
+// buyRecords/sellRecords가 undefined인 경우가 있었음.
+// 렌더링 중 reduce/map에서 에러가 나면 화면이 하얗게 멈춘 것처럼 보이므로,
+// 로딩 시점에 데이터 스키마를 보정(마이그레이션)한다.
+const sanitizePortfolioData = (raw: any): PortfolioData => {
+  const safeAccounts: StockAccount[] = Array.isArray(raw?.accounts) ? raw.accounts : [];
+
+  const accounts = safeAccounts.map((a: any, idx: number) => {
+    const safeStocks: Stock[] = Array.isArray(a?.stocks) ? a.stocks : [];
+    return {
+      id: String(a?.id ?? idx + 1),
+      name: String(a?.name ?? `${idx + 1}번 계좌`),
+      stocks: safeStocks.map((s: any, sIdx: number) => ({
+        id: String(s?.id ?? `${idx + 1}-${sIdx + 1}`),
+        ticker: String(s?.ticker ?? '티커명'),
+        quantity: Number(s?.quantity) || 0,
+        avgPrice: Number(s?.avgPrice) || 0,
+        currentPrice: Number(s?.currentPrice) || 0,
+        targetPrice: Number(s?.targetPrice) || 0,
+        currency: (s?.currency === 'KRW' ? 'KRW' : 'USD') as 'KRW' | 'USD',
+        buyRecords: Array.isArray(s?.buyRecords) ? s.buyRecords : [],
+        sellRecords: Array.isArray(s?.sellRecords) ? s.sellRecords : [],
+        isExpanded: Boolean(s?.isExpanded),
+      })),
+    } as StockAccount;
+  });
+
+  const exchangeRate = Number(raw?.exchangeRate) || 1350;
+  return {
+    accounts:
+      accounts.length > 0
+        ? accounts
+        : [
+            { id: '1', name: '1번 계좌', stocks: [] },
+            { id: '2', name: '2번 계좌', stocks: [] },
+          ],
+    exchangeRate,
+  };
+};
+
 export function StockPortfolio() {
   const [data, setData] = useState<PortfolioData>(() => {
     const saved = localStorage.getItem('stockPortfolio');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return sanitizePortfolioData(parsed);
       } catch {
         // ignore
       }
@@ -891,7 +932,10 @@ export function StockPortfolio() {
                 .map((stock) => {
                   const currencySymbol = stock.currency === 'USD' ? '$' : '₩';
 
-                  const buyTotalCost = stock.buyRecords.reduce(
+                  const buyRecords = Array.isArray(stock.buyRecords) ? stock.buyRecords : [];
+                  const sellRecords = Array.isArray(stock.sellRecords) ? stock.sellRecords : [];
+
+                  const buyTotalCost = buyRecords.reduce(
                     (sum, r) => sum + (Number(r.quantity) || 0) * (Number(r.price) || 0),
                     0
                   );
@@ -927,7 +971,7 @@ export function StockPortfolio() {
                             </tr>
                           </thead>
                           <tbody>
-                            {stock.buyRecords.map((record) => {
+                            {buyRecords.map((record) => {
                               const total = (Number(record.quantity) || 0) * (Number(record.price) || 0);
                               return (
                                 <tr key={record.id} className="border-b border-gray-100">
@@ -1015,7 +1059,7 @@ export function StockPortfolio() {
                             </tr>
                           </thead>
                           <tbody>
-                            {stock.sellRecords.map((record) => {
+                            {sellRecords.map((record) => {
                               const total = (Number(record.quantity) || 0) * (Number(record.price) || 0);
                               return (
                                 <tr key={record.id} className="border-b border-gray-100">
