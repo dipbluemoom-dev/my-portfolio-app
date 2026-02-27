@@ -33,6 +33,8 @@ interface SellRecord {
   date: string;
   quantity: number;
   price: number;
+  // 매도 시점의 평단가(스냅샷). 이후 추가매수로 평단이 바뀌어도 과거 손익 계산이 흔들리지 않게 함
+  avgPriceAtSell?: number;
 }
 
 interface Stock {
@@ -57,11 +59,6 @@ interface StockAccount {
 interface PortfolioData {
   accounts: StockAccount[];
   exchangeRate: number; // 원/달러
-}
-
-interface MonthlySalesData {
-  month: number;
-  sales: number;
 }
 
 const normalizeTicker = (t: string) => (t || '').trim().toUpperCase();
@@ -104,7 +101,15 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
         targetPrice: Number(s?.targetPrice) || 0,
         currency: (s?.currency === 'KRW' ? 'KRW' : 'USD') as 'KRW' | 'USD',
         buyRecords: Array.isArray(s?.buyRecords) ? s.buyRecords : [],
-        sellRecords: Array.isArray(s?.sellRecords) ? s.sellRecords : [],
+        sellRecords: Array.isArray(s?.sellRecords)
+          ? s.sellRecords.map((r: any, rIdx: number) => ({
+              id: String(r?.id ?? `${idx + 1}-${sIdx + 1}-sell-${rIdx + 1}`),
+              date: String(r?.date ?? ''),
+              quantity: Number(r?.quantity) || 0,
+              price: Number(r?.price) || 0,
+              avgPriceAtSell: Number(r?.avgPriceAtSell) || (Number(s?.avgPrice) || 0),
+            }))
+          : [],
         isExpanded: Boolean(s?.isExpanded),
       })),
     } as StockAccount;
@@ -169,19 +174,6 @@ export function StockPortfolio() {
       setLoadOk(false);
     }
   }, []);
-
-  const [monthlySales, setMonthlySales] = useState<MonthlySalesData[]>(() => {
-    const saved = localStorage.getItem('monthlyStockSales');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // ignore
-      }
-    }
-    return Array.from({ length: 12 }, (_, i) => ({ month: i + 1, sales: 0 }));
-  });
-
   // ✅ 공통(티커별) 현재가: 동일 티커가 계좌에 여러 개 있어도 한 번만 입력해서 자동 계산
   // (기존 데이터/계산 로직은 유지, 현재가만 공통값이 있으면 우선 적용)
   const [tickerPrices, setTickerPrices] = useState<TickerPriceMap>(() => {
@@ -221,11 +213,6 @@ export function StockPortfolio() {
       // ignore
     }
   }, [data, loadOk]);
-
-  useEffect(() => {
-    localStorage.setItem('monthlyStockSales', JSON.stringify(monthlySales));
-  }, [monthlySales]);
-
   const updateExchangeRate = (rate: number) => {
     setData({
       ...data,
@@ -397,6 +384,7 @@ export function StockPortfolio() {
       date: new Date().toISOString().split('T')[0],
       quantity: 0,
       price: 0,
+      avgPriceAtSell: round2(Number(stock.avgPrice) || 0),
     };
 
     updateStock(accountId, stockId, {
@@ -428,15 +416,21 @@ export function StockPortfolio() {
 
 
   // 매도기록 -> 수량 반영(평단 유지)
+  // + 매도 손익 계산을 위해, 각 매도기록에 매도 시점 평단(avgPriceAtSell)을 스냅샷으로 저장한다.
   const applySellRecordsToStock = (accountId: string, stockId: string) => {
     const account = data.accounts.find((acc) => acc.id === accountId);
     const stock = account?.stocks.find((s) => s.id === stockId);
     if (!stock) return;
 
-    const sellQty = (Array.isArray(stock.sellRecords) ? stock.sellRecords : []).reduce(
-      (sum, r) => sum + (Number(r.quantity) || 0),
-      0
-    );
+    const sr = Array.isArray(stock.sellRecords) ? stock.sellRecords : [];
+
+    // avgPriceAtSell 스냅샷 보정 (과거 데이터 호환)
+    const fixedSellRecords = sr.map((r) => ({
+      ...r,
+      avgPriceAtSell: Number((r as any).avgPriceAtSell) || round2(Number(stock.avgPrice) || 0),
+    }));
+
+    const sellQty = fixedSellRecords.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
 
     if (sellQty <= 0) {
       alert('매도기록 수량이 0이에요. 수량 반영을 취소했어요.');
@@ -448,6 +442,7 @@ export function StockPortfolio() {
 
     updateStock(accountId, stockId, {
       quantity: nextQty,
+      sellRecords: fixedSellRecords,
       // avgPrice는 유지
     });
   };
@@ -651,12 +646,35 @@ export function StockPortfolio() {
   const [avgDownCur, setAvgDownCur] = useState<number>(0);
   const [avgDownAddQty, setAvgDownAddQty] = useState<number>(0);
 
-  const updateMonthlySales = (month: number, sales: number) => {
-    setMonthlySales(
-      monthlySales.map((item) => (item.month === month ? { ...item, sales } : item))
-    );
-  };
+  // ✅ 월별 매도 손익(원) 자동 집계
+  // - 매도기록의 (매도단가 - 매도시점 평단가) * 수량
+  // - USD 종목은 환율로 원화 환산
+  const monthlyRealizedPnLKRW = useMemo(() => {
+    const rate = Number(data.exchangeRate) || 0;
+    const arr = Array.from({ length: 12 }, () => 0);
 
+    for (const account of data.accounts) {
+      for (const stock of account.stocks) {
+        const records = Array.isArray(stock.sellRecords) ? stock.sellRecords : [];
+        for (const r of records) {
+          const date = String((r as any).date || '');
+          const m = /^\d{4}-\d{2}-\d{2}$/.test(date) ? Number(date.slice(5, 7)) : NaN;
+          if (!Number.isFinite(m) || m < 1 || m > 12) continue;
+
+          const qty = Number((r as any).quantity) || 0;
+          const sellPrice = Number((r as any).price) || 0;
+          if (qty === 0) continue;
+
+          const avgAtSell = Number((r as any).avgPriceAtSell) || Number(stock.avgPrice) || 0;
+          const pnl = (sellPrice - avgAtSell) * qty;
+          const pnlKRW = stock.currency === 'USD' ? pnl * rate : pnl;
+          arr[m - 1] += pnlKRW;
+        }
+      }
+    }
+
+    return arr.map((v, i) => ({ month: i + 1, pnlKRW: v }));
+  }, [data.accounts, data.exchangeRate]);
   const updateTickerPrice = (key: string, raw: string) => {
     const v = raw.trim();
     setTickerPrices((prev) => {
@@ -1254,17 +1272,19 @@ export function StockPortfolio() {
 
         {/* ✅ 부피 줄인 컴팩트 입력 (복제 기능 제거) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-          {monthlySales.map((item) => (
+          {monthlyRealizedPnLKRW.map((item) => (
             <div
               key={item.month}
               className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-gray-50 border"
             >
               <div className="text-sm font-semibold text-gray-700">{item.month}월</div>
               <Input
-                type="number"
-                value={item.sales}
-                onChange={(e) => updateMonthlySales(item.month, Number(e.target.value))}
-                className="w-28 h-9 text-sm text-right"
+                readOnly
+                value={fmt0(item.pnlKRW)}
+                className={
+                  "w-28 h-9 text-sm text-right bg-white " +
+                  (item.pnlKRW >= 0 ? 'text-rose-400/80 font-semibold' : 'text-sky-500/80 font-semibold')
+                }
               />
             </div>
           ))}
