@@ -6,7 +6,7 @@ import { Wallet, TrendingUp, List, Landmark, LineChart, Save } from 'lucide-reac
 import { Button } from './components/ui/button';
 import { useSupabaseSession } from './hooks/useSupabaseSession';
 import { isSupabaseConfigured } from './lib/supabaseClient';
-import { pushToCloud, readLocalStoragePayload } from './lib/cloudSync';
+import { markLocalPayloadSynced, pushToCloud, readLocalStoragePayload } from './lib/cloudSync';
 
 // ✅ 탭별로 번들을 쪼개서 초기 로딩을 가볍게 (수치/기능은 동일)
 // 지출관리는 기본 탭이라(초기 진입) 분리해도 이득이 거의 없어서 그대로 번들에 포함
@@ -66,7 +66,9 @@ export default function App() {
     setIsSaving(true);
     setSaveMsg(null);
     try {
-      await pushToCloud(user.id, readLocalStoragePayload());
+      const payload = readLocalStoragePayload();
+      const updatedAt = await pushToCloud(user.id, payload);
+      markLocalPayloadSynced(payload, updatedAt);
       setSaveMsg('저장 완료');
       window.setTimeout(() => setSaveMsg(null), 2000);
     } catch (e: any) {
