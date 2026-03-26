@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useState } from 'react';
 import { MonthlyBudget } from './components/MonthlyBudget';
 import { CloudSyncPanel } from './components/CloudSyncPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
@@ -6,7 +6,7 @@ import { Wallet, TrendingUp, List, Landmark, LineChart, Save } from 'lucide-reac
 import { Button } from './components/ui/button';
 import { useSupabaseSession } from './hooks/useSupabaseSession';
 import { isSupabaseConfigured } from './lib/supabaseClient';
-import { pushToCloud, readLocalStoragePayload } from './lib/cloudSync';
+import { markLocalPayloadSynced, pushToCloud, readLocalStoragePayload } from './lib/cloudSync';
 
 // ✅ 탭별로 번들을 쪼개서 초기 로딩을 가볍게 (수치/기능은 동일)
 // 지출관리는 기본 탭이라(초기 진입) 분리해도 이득이 거의 없어서 그대로 번들에 포함
@@ -66,7 +66,9 @@ export default function App() {
     setIsSaving(true);
     setSaveMsg(null);
     try {
-      await pushToCloud(user.id, readLocalStoragePayload());
+      const payload = readLocalStoragePayload();
+      const updatedAt = await pushToCloud(user.id, payload);
+      markLocalPayloadSynced(payload, updatedAt);
       setSaveMsg('저장 완료');
       window.setTimeout(() => setSaveMsg(null), 2000);
     } catch (e: any) {
@@ -76,7 +78,6 @@ export default function App() {
     }
   }, [user]);
 
-  const months = useMemo(() => MONTHS, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50 to-rose-50">
@@ -142,7 +143,7 @@ export default function App() {
           {activeTab === 'budget' && (
             <div className="mb-4 p-4 bg-white/80 backdrop-blur rounded-xl shadow-sm border">
               <div className="flex items-center gap-2 overflow-x-auto">
-                {months.map((month) => (
+                {MONTHS.map((month) => (
                   <Button
                     key={month.value}
                     onClick={() => setSelectedMonth(month.value)}

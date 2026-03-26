@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import {
+  isLocalDirtyComparedToLastSync,
+  markLocalPayloadSynced,
   pullFromCloud,
   pushToCloud,
   readLocalStoragePayload,
+  readSyncMeta,
   writeLocalStoragePayload,
 } from '../lib/cloudSync';
 import { Button } from './ui/button';
@@ -19,8 +22,8 @@ function shallowEqualPayload(a: Record<string, string>, b: Record<string, string
   return true;
 }
 
-const AUTO_PULL_INTERVAL_MS = 30_000; // 30초마다 서버 확인
-const AUTO_PUSH_INTERVAL_MS = 120_000; // 2분마다 자동 업로드(너무 잦으면 사용감 저하)
+const AUTO_PULL_INTERVAL_MS = 5 * 60_000; // 5분마다 서버 확인(자동 덮어쓰기 위험 완화)
+const AUTO_PUSH_INTERVAL_MS = 30_000; // 30초마다 자동 업로드
 const AUTO_RELOAD_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1시간
 const AUTO_RELOAD_KEY = 'cloudSyncLastAutoReloadAt';
 
@@ -142,72 +145,87 @@ export function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void })
     }
   };
 
-  const pullOnce = async () => {
+  const pullOnce = useCallback(async (reason: 'auto' | 'initial' = 'auto') => {
     if (!userId) return;
 
     try {
-      const cloudPayload = await pullFromCloud(userId);
-      if (!cloudPayload) return;
+      const cloudRecord = await pullFromCloud(userId);
+      if (!cloudRecord) return;
 
+      const cloudPayload = cloudRecord.payload;
       const localPayload = readLocalStoragePayload();
+      const syncMeta = readSyncMeta();
+      const localDirty = isLocalDirtyComparedToLastSync(localPayload);
+      const cloudIsNewer =
+        !!cloudRecord.updatedAt &&
+        (!syncMeta.lastKnownCloudUpdatedAt || cloudRecord.updatedAt > syncMeta.lastKnownCloudUpdatedAt);
 
-      if (!shallowEqualPayload(localPayload, cloudPayload)) {
-        // 서버값으로 맞추고 새로고침(단, 무한루프 방지)
-        writeLocalStoragePayload(cloudPayload);
+      if (shallowEqualPayload(localPayload, cloudPayload)) {
+        writeLocalStoragePayload(cloudPayload, { cloudUpdatedAt: cloudRecord.updatedAt, markAsSynced: true });
+        return;
+      }
 
-        if (canAutoReloadNow()) {
-          markAutoReloadNow();
-          setMessage('다른 기기 값으로 동기화했어. 새로고침 할게!');
-          onToast?.('다른 기기 값으로 맞췄어. 새로고침 할게!');
-          setTimeout(() => window.location.reload(), 600);
-        } else {
-          // 자동 새로고침이 막혀있거나(모바일/인앱브라우저) / 1시간 내 재실행이면
-          setMessage('다른 기기 값으로 맞췄어. 화면만 한번 새로고침하면 완벽해!');
-          onToast?.('다른 기기 값으로 맞췄어. 새로고침 한번 해줘!');
-        }
+      if (localDirty && reason === 'auto') {
+        setMessage('이 기기에서 바뀐 내용이 있어서 서버값 자동 덮어쓰기를 건너뛰었어. 먼저 저장해줘.');
+        return;
+      }
+
+      if (!cloudIsNewer && localDirty) {
+        setMessage('로컬 값이 더 최신으로 보여서 서버값 덮어쓰기를 막았어. 저장 버튼을 눌러줘.');
+        return;
+      }
+
+      // 서버값으로 맞추고 새로고침(단, 무한루프 방지)
+      writeLocalStoragePayload(cloudPayload, { cloudUpdatedAt: cloudRecord.updatedAt, markAsSynced: true });
+
+      if (canAutoReloadNow()) {
+        markAutoReloadNow();
+        setMessage('다른 기기 값으로 동기화했어. 새로고침 할게!');
+        onToast?.('다른 기기 값으로 맞췄어. 새로고침 할게!');
+        setTimeout(() => window.location.reload(), 600);
+      } else {
+        // 자동 새로고침이 막혀있거나(모바일/인앱브라우저) / 1시간 내 재실행이면
+        setMessage('다른 기기 값으로 맞췄어. 화면만 한번 새로고침하면 완벽해!');
+        onToast?.('다른 기기 값으로 맞췄어. 새로고침 한번 해줘!');
       }
     } catch (e: any) {
-      // ignore
       console.error(e);
+      throw e;
     }
-  };
+  }, [autoReloadDisabled, onToast, userId]);
 
-  const pushOnce = async () => {
+  const pushOnce = useCallback(async () => {
     if (!userId) return;
-    try {
-      const payload = readLocalStoragePayload();
-      await pushToCloud(userId, payload);
-      // 너무 자주 토스트하면 방해라서 조용히
-    } catch (e: any) {
-      console.error(e);
-    }
-  };
+    const payload = readLocalStoragePayload();
+    const updatedAt = await pushToCloud(userId, payload);
+    markLocalPayloadSynced(payload, updatedAt);
+  }, [userId]);
 
   // 자동 Pull
   useEffect(() => {
     if (!userId) return;
-    pullOnce();
+    pullOnce('initial').catch(console.error);
 
     const t = setInterval(() => {
-      pullOnce();
+      pullOnce('auto').catch(console.error);
     }, AUTO_PULL_INTERVAL_MS);
 
     return () => clearInterval(t);
-  }, [userId]);
+  }, [pullOnce, userId]);
 
   // 자동 Push
   useEffect(() => {
     if (!userId) return;
 
     const t = setInterval(() => {
-      pushOnce();
+      pushOnce().catch(console.error);
     }, AUTO_PUSH_INTERVAL_MS);
 
     return () => clearInterval(t);
-  }, [userId]);
+  }, [pushOnce, userId]);
 
   // 수동 저장
-  const manualSave = async () => {
+  const manualSave = useCallback(async () => {
     if (!userId) {
       onToast?.('먼저 로그인부터 해줘');
       return;
@@ -218,7 +236,7 @@ export function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void })
     } catch {
       onToast?.('저장 실패… 잠깐 뒤에 다시 해줘');
     }
-  };
+  }, [onToast, pushOnce, userId]);
 
   const currentDomain = useMemo(() => {
     try {
@@ -262,7 +280,7 @@ export function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void })
       </div>
 
       <div className="mt-2 text-xs text-gray-400">
-        자동 동기화: 서버 확인 30초 / 자동 업로드 2분
+        자동 동기화: 서버 확인 5분 / 자동 업로드 30초
         {autoReloadDisabled && (
           <span className="block text-amber-700/80 mt-1">* 이 기기(브라우저)는 저장소가 제한돼서 자동 새로고침을 껐어. 필요한 경우 직접 새로고침만 해줘.</span>
         )}

@@ -1,0 +1,23 @@
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+/*
+  모바일(iPhone 포함)에서 'PC처럼' 보이도록 하는 보조 설정
+  - viewport는 index.html에서 width=1200로 고정
+  - iOS 자동 글자 확대 방지 + 안전영역 패딩
+  - 100vh 이슈 완화(주소창 변화)
+*/
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+
+/* Tailwind min-h-screen(100vh) → 100dvh로 보정 */
+.min-h-screen {
+  min-height: 100dvh;
+}
