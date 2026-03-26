@@ -13,8 +13,8 @@ import {
   ChevronDown,
   ChevronUp,
   GripVertical,
-  Copy,
   TrendingUp,
+  Copy,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -130,28 +130,17 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
 
   // selectedMonth가 변경될 때 데이터 로드
   useEffect(() => {
-    const saved = localStorage.getItem(getStorageKey(selectedMonth));
-    if (saved) {
-      const parsedData = JSON.parse(saved);
-      setData({
-        ...parsedData,
-        income: parsedData.income || [],
-        fixedCosts:
-          parsedData.fixedCosts?.map((item: BudgetItem) => ({
-            ...item,
-            subItems: item.subItems || [],
-          })) || defaultFixedCosts,
-      });
-    } else {
-      setData({
+    const parsed = parseMonthData(localStorage.getItem(getStorageKey(selectedMonth)));
+    setData(
+      parsed ?? {
         salary: 0,
         fixedCosts: defaultFixedCosts,
         income: [],
         livingExpenses: [],
         accountExpenses: [],
         cardBill: 0,
-      });
-    }
+      }
+    );
     setExpandedItems(new Set());
   }, [selectedMonth]);
 
@@ -163,26 +152,34 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
     localStorage.setItem(getStorageKey(selectedMonth), JSON.stringify(data));
   }, [data, selectedMonth]);
 
-  // ✅ 1월 데이터를 모든 월로 복제
-  const copyToAllMonths = () => {
-    const janData = localStorage.getItem('monthlyBudget_1');
-    if (!janData) {
+
+  const copyJanuaryToOtherMonths = () => {
+    const janData = localStorage.getItem(getStorageKey(1));
+    const parsedJanData = parseMonthData(janData);
+
+    if (!parsedJanData) {
       alert('1월 데이터가 없습니다. (먼저 1월에 값을 입력해 주세요)');
       return;
     }
 
-    if (!confirm('1월 데이터를 1월부터 12월까지 모든 월에 복제하시겠습니까?')) {
+    if (!confirm('1월은 유지하고, 2월~12월 기존 데이터를 모두 지운 뒤 1월 내용으로 복제할까요?')) {
       return;
     }
 
-    for (let month = 1; month <= 12; month++) {
-      localStorage.setItem(`monthlyBudget_${month}`, janData);
+    const januaryPayload = JSON.stringify(parsedJanData);
+
+    for (let month = 2; month <= 12; month += 1) {
+      localStorage.removeItem(getStorageKey(month));
+      localStorage.setItem(getStorageKey(month), januaryPayload);
     }
 
-    // 현재 선택된 월 데이터 다시 로드
-    setData(JSON.parse(janData));
-    alert('1월 데이터가 모든 월에 복제되었습니다.');
+    if (selectedMonth !== 1) {
+      setData(structuredClone(parsedJanData));
+    }
+
+    alert('1월은 유지하고, 2월~12월을 1월 내용으로 다시 복제했습니다.');
   };
+
 
   const addItem = (category: BudgetCategory) => {
     const newItem: BudgetItem = {
@@ -294,6 +291,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
   const totalExpenses = totalFixedCosts + totalLivingExpenses + totalAccountExpenses;
   const totalIncomeSalary = data.salary + totalIncome;
   const remainingSalary = totalIncomeSalary - totalExpenses;
+  const numberInputValue = (value: number) => (value === 0 ? '' : String(value));
 
   const renderSubItem = (subItem: SubItem, itemId: string, category: BudgetCategory) => {
     return (
@@ -306,7 +304,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
         />
         <Input
           type="number"
-          value={subItem.amount}
+          value={numberInputValue(subItem.amount)}
           onChange={(e) => updateSubItem(category, itemId, subItem.id, { amount: Number(e.target.value) })}
           className="w-32"
           placeholder="금액"
@@ -346,7 +344,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
                   <Input value={editValue.name} onChange={(e) => setEditValue({ ...editValue, name: e.target.value })} className="flex-1" />
                   <Input
                     type="number"
-                    value={editValue.amount}
+                    value={numberInputValue(editValue.amount)}
                     onChange={(e) => setEditValue({ ...editValue, amount: Number(e.target.value) })}
                     className="w-32"
                   />
@@ -408,14 +406,14 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="space-y-4 p-4 md:p-6 max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 gap-3">
           <div className="flex items-center gap-3">
             <Wallet className="w-8 h-8 text-amber-500" />
             <h1 className="text-2xl">월급 대비 지출 가이드</h1>
           </div>
-          <Button onClick={copyToAllMonths} variant="outline" className="gap-2">
+          <Button onClick={copyJanuaryToOtherMonths} variant="outline" className="gap-2">
             <Copy className="w-4 h-4" />
-            1월 → 전체 복제
+            1월 → 나머지 복제
           </Button>
         </div>
 
@@ -425,7 +423,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
             <div className="flex items-center gap-2">
               <Input
                 type="number"
-                value={data.salary}
+                value={numberInputValue(data.salary)}
                 onChange={(e) => setData({ ...data, salary: Number(e.target.value) })}
                 className="w-48 bg-white/80 text-slate-900"
               />

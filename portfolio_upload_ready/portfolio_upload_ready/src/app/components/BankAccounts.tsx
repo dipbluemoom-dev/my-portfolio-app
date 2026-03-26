@@ -23,6 +23,8 @@ interface Account {
   balance: number;
 }
 
+const numInputValue = (value: number) => (value === 0 ? '' : String(value));
+
 interface BankData {
   accounts: Account[];
   savingsAccounts: SavingsAccount[];
@@ -216,7 +218,7 @@ export function BankAccounts() {
                 />
                 <Input
                   type="number"
-                  value={account.balance}
+                  value={numInputValue(account.balance)}
                   onChange={(e) =>
                     updateAccount(account.id, { balance: Number(e.target.value) })
                   }

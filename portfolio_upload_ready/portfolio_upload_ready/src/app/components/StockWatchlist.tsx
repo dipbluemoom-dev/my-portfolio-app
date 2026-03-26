@@ -25,6 +25,8 @@ interface WatchlistData {
 type TierKey = keyof WatchlistData;
 const DND_TYPE = 'WATCH_STOCK';
 
+const numInputValue = (value: number) => (value === 0 ? '' : String(value));
+
 type DragItem = {
   id: string;
   fromTier: TierKey;
@@ -171,7 +173,7 @@ function TierSection({
                     <label className="text-sm text-gray-600">현재가</label>
                     <Input
                       type="number"
-                      value={stock.currentPrice}
+                      value={numInputValue(stock.currentPrice)}
                       onChange={(e) => updateStock(tier, stock.id, { currentPrice: Number(e.target.value) })}
                       className="mt-1"
                       placeholder="0"
@@ -181,7 +183,7 @@ function TierSection({
                     <label className="text-sm text-gray-600">목표가</label>
                     <Input
                       type="number"
-                      value={stock.targetPrice}
+                      value={numInputValue(stock.targetPrice)}
                       onChange={(e) => updateStock(tier, stock.id, { targetPrice: Number(e.target.value) })}
                       className="mt-1"
                       placeholder="0"
@@ -191,7 +193,7 @@ function TierSection({
                     <label className="text-sm text-gray-600">주식 수</label>
                     <Input
                       type="number"
-                      value={stock.quantity}
+                      value={numInputValue(stock.quantity)}
                       onChange={(e) => updateStock(tier, stock.id, { quantity: Number(e.target.value) })}
                       className="mt-1"
                       placeholder="0"
@@ -353,14 +355,6 @@ export function StockWatchlist() {
           <h1 className="text-2xl">주식 대기표</h1>
         </div>
 
-        <div className="text-sm text-gray-600">
-          환율: <span className="font-semibold">{exchangeRate ? exchangeRate.toLocaleString() : '미설정'}</span> 원/$
-          <span className="text-xs text-gray-500"> (주식 포트폴리오에서 입력한 값이 자동 적용됩니다)</span>
-        </div>
-
-        <div className="text-xs text-gray-500">
-          * 종목 카드 왼쪽의 <span className="font-semibold">≡</span> 아이콘을 드래그해서, 1차/2차 상관없이 원하는 위치로 이동할 수 있어요.
-        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <TierSection

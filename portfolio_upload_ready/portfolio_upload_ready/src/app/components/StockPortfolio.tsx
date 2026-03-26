@@ -68,10 +68,19 @@ interface Stock {
   isExpanded: boolean;
 }
 
+interface CashFlowRecord {
+  id: string;
+  date: string;
+  type: 'deposit' | 'withdraw';
+  amount: number;
+  memo: string;
+}
+
 interface StockAccount {
   id: string;
   name: string;
   stocks: Stock[];
+  cashFlows: CashFlowRecord[];
 }
 
 interface PortfolioData {
@@ -99,6 +108,7 @@ const fmt0 = (n: number) => (Number.isFinite(n) ? Math.round(n) : 0).toLocaleStr
 const fmtMoney = (n: number, currency: 'KRW' | 'USD') => (currency === 'KRW' ? fmt0(n) : fmt2(n));
 
 const fmtPct = (n: number) => fmt2(n) + '%';
+const numInputValue = (value: number) => (value === 0 ? '' : String(value));
 
 // ✅ 과거 버전 localStorage 데이터(필드 누락)로 인해 확장(▼) 클릭 시
 // buyRecords/sellRecords가 undefined인 경우가 있었음.
@@ -112,6 +122,15 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
     return {
       id: String(a?.id ?? idx + 1),
       name: String(a?.name ?? `${idx + 1}번 계좌`),
+      cashFlows: Array.isArray(a?.cashFlows)
+        ? a.cashFlows.map((f: any, fIdx: number) => ({
+            id: String(f?.id ?? `${idx + 1}-cash-${fIdx + 1}`),
+            date: String(f?.date ?? ''),
+            type: f?.type === 'withdraw' ? 'withdraw' : 'deposit',
+            amount: Number(f?.amount) || 0,
+            memo: String(f?.memo ?? ''),
+          }))
+        : [],
       stocks: safeStocks.map((s: any, sIdx: number) => ({
         id: String(s?.id ?? `${idx + 1}-${sIdx + 1}`),
         ticker: String(s?.ticker ?? '티커명'),
@@ -193,8 +212,8 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
       accounts.length > 0
         ? accounts
         : [
-            { id: '1', name: '1번 계좌', stocks: [] },
-            { id: '2', name: '2번 계좌', stocks: [] },
+            { id: '1', name: '1번 계좌', stocks: [], cashFlows: [] },
+            { id: '2', name: '2번 계좌', stocks: [], cashFlows: [] },
           ],
     exchangeRate,
     sellLedger: deduped,
@@ -230,8 +249,8 @@ export function StockPortfolio() {
     }
     return {
       accounts: [
-        { id: '1', name: '1번 계좌', stocks: [] },
-        { id: '2', name: '2번 계좌', stocks: [] },
+        { id: '1', name: '1번 계좌', stocks: [], cashFlows: [] },
+        { id: '2', name: '2번 계좌', stocks: [], cashFlows: [] },
       ],
       exchangeRate: 1350,
       sellLedger: [],
@@ -397,6 +416,7 @@ export function StockPortfolio() {
         id: Date.now().toString(),
         name: `${prev.accounts.length + 1}번 계좌`,
         stocks: [],
+        cashFlows: [],
       };
       return { ...prev, accounts: [...prev.accounts, newAccount] };
     });
@@ -799,6 +819,60 @@ export function StockPortfolio() {
     }, 0);
   };
 
+  const getAccountNetCashFlowKRW = (account: StockAccount) =>
+    (Array.isArray(account.cashFlows) ? account.cashFlows : []).reduce((sum, entry) => {
+      const amount = Number(entry.amount) || 0;
+      return sum + (entry.type === 'withdraw' ? -amount : amount);
+    }, 0);
+
+  const addCashFlow = (accountId: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    setDataWithUndo('action', (prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) =>
+        account.id === accountId
+          ? {
+              ...account,
+              cashFlows: [
+                ...(Array.isArray(account.cashFlows) ? account.cashFlows : []),
+                { id: Date.now().toString(), date: today, type: 'deposit', amount: 0, memo: '입금' },
+              ],
+            }
+          : account
+      ),
+    }));
+  };
+
+  const updateCashFlow = (accountId: string, cashFlowId: string, updates: Partial<CashFlowRecord>) => {
+    setDataWithUndo('edit', (prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) =>
+        account.id === accountId
+          ? {
+              ...account,
+              cashFlows: (Array.isArray(account.cashFlows) ? account.cashFlows : []).map((entry) =>
+                entry.id === cashFlowId ? { ...entry, ...updates } : entry
+              ),
+            }
+          : account
+      ),
+    }));
+  };
+
+  const deleteCashFlow = (accountId: string, cashFlowId: string) => {
+    setDataWithUndo('action', (prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) =>
+        account.id === accountId
+          ? {
+              ...account,
+              cashFlows: (Array.isArray(account.cashFlows) ? account.cashFlows : []).filter((entry) => entry.id !== cashFlowId),
+            }
+          : account
+      ),
+    }));
+  };
+
   // 계좌별 비중 (구매비용 기준) - 동일 티커는 합산
   const getAccountWeights = (account: StockAccount) => {
     const rate = Number(data.exchangeRate) || 0;
@@ -881,7 +955,7 @@ export function StockPortfolio() {
       }
     }
     return total;
-  }, [data.accounts, data.exchangeRate]);
+  }, [data.sellLedger, data.exchangeRate]);
 
   const portfolioTickerKeys = useMemo(() => {
     const s = new Set<string>();
@@ -1073,7 +1147,7 @@ export function StockPortfolio() {
           <div className="flex items-center gap-2">
             <Input
               type="number"
-              value={data.exchangeRate}
+              value={numInputValue(data.exchangeRate)}
               onChange={(e) => updateExchangeRate(Number(e.target.value))}
               className="w-28"
             />
@@ -1093,9 +1167,6 @@ export function StockPortfolio() {
           <div className="flex items-center gap-2">
             <Settings className="w-5 h-5 text-slate-500" />
             <span className="font-semibold">공통 현재가 (티커별)</span>
-          </div>
-          <div className="text-xs text-gray-500">
-            여기서 입력하면, 동일 티커가 여러 계좌에 있어도 손익/손익률이 자동 계산돼요.
           </div>
         </div>
 
@@ -1130,7 +1201,7 @@ export function StockPortfolio() {
                   <div className="flex items-center gap-2">
                     <Input
                       type="number"
-                      value={has ? (tickerPrices[g.key] as number) : ''}
+                      value={has ? numInputValue(tickerPrices[g.key] as number) : ''}
                       onChange={(e) => updateTickerPrice(g.key, e.target.value)}
                       className="w-28 h-9 text-right"
                       placeholder="현재가"
@@ -1161,16 +1232,21 @@ export function StockPortfolio() {
           </div>
         </Card>
 
-        {data.accounts.slice(0, 2).map((account, idx) => {
+        {data.accounts.map((account) => {
           const accountTotalKRW = getAccountTotalKRW(account);
-          const title = idx === 0 ? '1번 계좌 평가금액(원화)' : '2번 계좌 평가금액(원화)';
+          const accountNetCashFlowKRW = getAccountNetCashFlowKRW(account);
+          const accountPnLKRW = accountTotalKRW - accountNetCashFlowKRW;
+          const accountPnLPct = accountNetCashFlowKRW !== 0 ? (accountPnLKRW / accountNetCashFlowKRW) * 100 : 0;
           return (
             <Card key={account.id} className="p-6 bg-white border shadow-md rounded-2xl">
               <div className="flex justify-between items-start">
                 <div>
-                  <div className="text-sm text-gray-600">{title}</div>
+                  <div className="text-sm text-gray-600">{account.name}</div>
                   <div className="text-3xl font-bold mt-1">₩ {fmt0(accountTotalKRW)}</div>
-                  <div className="mt-2 text-xs text-gray-500">계좌명: {account.name}</div>
+                  <div className="mt-2 text-xs text-gray-500">순입금액: ₩ {fmt0(accountNetCashFlowKRW)}</div>
+                  <div className={`mt-1 text-sm font-semibold ${accountPnLKRW >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}`}>
+                    {accountPnLKRW >= 0 ? '수익' : '손실'} ₩ {fmt0(accountPnLKRW)} ({fmtPct(accountPnLPct)})
+                  </div>
                 </div>
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
                   <CreditCard className="w-5 h-5 text-violet-400" />
@@ -1210,6 +1286,32 @@ export function StockPortfolio() {
                 <Plus className="w-4 h-4 mr-1" />
                 종목 추가
               </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div className="rounded-xl border bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">순입금액</div>
+                <div className="text-lg font-semibold">₩ {fmt0(getAccountNetCashFlowKRW(account))}</div>
+              </div>
+              <div className="rounded-xl border bg-gray-50 p-3">
+                <div className="text-xs text-gray-500">현재 평가금액</div>
+                <div className="text-lg font-semibold">₩ {fmt0(getAccountTotalKRW(account))}</div>
+              </div>
+              <div className="rounded-xl border bg-gray-50 p-3">
+                {(() => {
+                  const pnl = getAccountTotalKRW(account) - getAccountNetCashFlowKRW(account);
+                  const base = getAccountNetCashFlowKRW(account);
+                  const pct = base !== 0 ? (pnl / base) * 100 : 0;
+                  return (
+                    <>
+                      <div className="text-xs text-gray-500">계좌 수익 / 손실</div>
+                      <div className={`text-lg font-semibold ${pnl >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}`}>
+                        ₩ {fmt0(pnl)} ({fmtPct(pct)})
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
             </div>
 
             {/* 종목 테이블 */}
@@ -1278,7 +1380,7 @@ export function StockPortfolio() {
                         <td className="p-2 text-center">
                           <Input
                             type="number"
-                            value={stock.quantity}
+                            value={numInputValue(stock.quantity)}
                             onChange={(e) => updateStock(account.id, stock.id, { quantity: Number(e.target.value) })}
                             className="w-24 text-center border-transparent bg-transparent shadow-none focus-visible:ring-0 focus-visible:border-transparent"
                           />
@@ -1287,7 +1389,7 @@ export function StockPortfolio() {
                         <td className="p-2 text-center">
                           <Input
                             type="number"
-                            value={round2(Number(stock.avgPrice) || 0)}
+                            value={numInputValue(round2(Number(stock.avgPrice) || 0))}
                             onChange={(e) => updateStock(account.id, stock.id, { avgPrice: round2(Number(e.target.value)) })}
                             className="w-28 text-center border-transparent bg-transparent shadow-none focus-visible:ring-0 focus-visible:border-transparent"
                           />
@@ -1296,7 +1398,7 @@ export function StockPortfolio() {
                         <td className="p-2 text-center">
                           <Input
                             type="number"
-                            value={shownCurrent}
+                            value={numInputValue(shownCurrent)}
                             onChange={(e) => {
                               if (hasGlobal) {
                                 updateTickerPrice(tk, e.target.value);
@@ -1306,15 +1408,12 @@ export function StockPortfolio() {
                             }}
                             className="w-28 text-center"
                           />
-                          {hasGlobal && (
-                            <div className="mt-1 text-[10px] text-gray-400">공통 시세 적용</div>
-                          )}
                         </td>
 
                         <td className="p-2 text-center">
                           <Input
                             type="number"
-                            value={stock.targetPrice}
+                            value={numInputValue(stock.targetPrice)}
                             onChange={(e) => updateStock(account.id, stock.id, { targetPrice: Number(e.target.value) })}
                             className="w-28 text-center"
                           />
@@ -1427,7 +1526,7 @@ export function StockPortfolio() {
                                   <td className="p-2 text-center">
                                     <Input
                                       type="number"
-                                      value={record.quantity}
+                                      value={numInputValue(record.quantity)}
                                       onChange={(e) =>
                                         updateBuyRecord(account.id, stock.id, record.id, {
                                           quantity: Number(e.target.value),
@@ -1439,7 +1538,7 @@ export function StockPortfolio() {
                                   <td className="p-2 text-center">
                                     <Input
                                       type="number"
-                                      value={record.price}
+                                      value={numInputValue(record.price)}
                                       onChange={(e) =>
                                         updateBuyRecord(account.id, stock.id, record.id, {
                                           price: Number(e.target.value),
@@ -1520,7 +1619,7 @@ export function StockPortfolio() {
                                   <td className="p-2 text-center">
                                     <Input
                                       type="number"
-                                      value={record.quantity}
+                                      value={numInputValue(record.quantity)}
                                       onChange={(e) =>
                                         updateSellRecord(account.id, stock.id, record.id, {
                                           quantity: Number(e.target.value),
@@ -1532,7 +1631,7 @@ export function StockPortfolio() {
                                   <td className="p-2 text-center">
                                     <Input
                                       type="number"
-                                      value={record.price}
+                                      value={numInputValue(record.price)}
                                       onChange={(e) =>
                                         updateSellRecord(account.id, stock.id, record.id, {
                                           price: Number(e.target.value),
@@ -1609,7 +1708,7 @@ export function StockPortfolio() {
         <h2 className="text-2xl mb-4">비중 그래프 (구매비용 기준)</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {data.accounts.slice(0, 2).map((account, idx) => {
+          {data.accounts.map((account, idx) => {
             const weights = getAccountWeights(account);
             return (
               <div key={account.id} className="p-4 rounded-2xl border bg-gray-50">
@@ -1728,7 +1827,7 @@ export function StockPortfolio() {
                   <div className="text-xs text-gray-500 mb-1">현재가</div>
                   <Input
                     type="number"
-                    value={avgDownCur}
+                    value={numInputValue(avgDownCur)}
                     onChange={(e) => setAvgDownCur(Number(e.target.value))}
                     className="h-9 text-right"
                     placeholder="0"
@@ -1739,7 +1838,7 @@ export function StockPortfolio() {
                   <div className="text-xs text-gray-500 mb-1">현재 평단가</div>
                   <Input
                     type="number"
-                    value={avgDownAvg}
+                    value={numInputValue(avgDownAvg)}
                     onChange={(e) => setAvgDownAvg(round2(Number(e.target.value)))}
                     className="h-9 text-right"
                     placeholder="0"
@@ -1750,7 +1849,7 @@ export function StockPortfolio() {
                   <div className="text-xs text-gray-500 mb-1">현재 수량</div>
                   <Input
                     type="number"
-                    value={avgDownQty}
+                    value={numInputValue(avgDownQty)}
                     onChange={(e) => setAvgDownQty(Number(e.target.value))}
                     className="h-9 text-right"
                     placeholder="0"
@@ -1761,7 +1860,7 @@ export function StockPortfolio() {
                   <div className="text-xs text-gray-500 mb-1">물탈 주식 수(추가 매수 수량)</div>
                   <Input
                     type="number"
-                    value={avgDownAddQty}
+                    value={numInputValue(avgDownAddQty)}
                     onChange={(e) => setAvgDownAddQty(Number(e.target.value))}
                     className="h-9 text-right"
                     placeholder="0"
@@ -1812,6 +1911,102 @@ export function StockPortfolio() {
                 );
               })()}
             </div>
+          </div>
+        </div>
+
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold mb-3">계좌별 입금 / 출금 현황</h3>
+          <div className="space-y-4">
+            {data.accounts.map((account) => {
+              const netCashFlow = getAccountNetCashFlowKRW(account);
+              const valuation = getAccountTotalKRW(account);
+              const pnl = valuation - netCashFlow;
+              const pct = netCashFlow !== 0 ? (pnl / netCashFlow) * 100 : 0;
+
+              return (
+                <div key={account.id} className="rounded-2xl border bg-gray-50 p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-3">
+                    <div>
+                      <div className="font-semibold">{account.name}</div>
+                      <div className="text-xs text-gray-500">
+                        순입금액 ₩ {fmt0(netCashFlow)} · 현재 평가금액 ₩ {fmt0(valuation)}
+                      </div>
+                      <div className={`text-sm font-semibold mt-1 ${pnl >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}`}>
+                        {pnl >= 0 ? '수익' : '손실'} ₩ {fmt0(pnl)} ({fmtPct(pct)})
+                      </div>
+                    </div>
+                    <Button size="sm" onClick={() => addCashFlow(account.id)}>
+                      <Plus className="w-4 h-4 mr-1" />
+                      입출금 추가
+                    </Button>
+                  </div>
+
+                  {(account.cashFlows || []).length === 0 ? (
+                    <div className="text-sm text-gray-400 py-4 text-center">입금 / 출금 내역이 없습니다</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[720px]">
+                        <thead>
+                          <tr className="border-b text-sm text-gray-600">
+                            <th className="p-2 text-left">날짜</th>
+                            <th className="p-2 text-left">구분</th>
+                            <th className="p-2 text-right">금액</th>
+                            <th className="p-2 text-left">메모</th>
+                            <th className="p-2 text-center">관리</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(account.cashFlows || []).map((entry) => (
+                            <tr key={entry.id} className="border-b border-gray-100">
+                              <td className="p-2">
+                                <Input
+                                  type="date"
+                                  value={entry.date}
+                                  onChange={(e) => updateCashFlow(account.id, entry.id, { date: e.target.value })}
+                                  className="w-40"
+                                />
+                              </td>
+                              <td className="p-2">
+                                <select
+                                  value={entry.type}
+                                  onChange={(e) => updateCashFlow(account.id, entry.id, { type: e.target.value as 'deposit' | 'withdraw' })}
+                                  className="h-9 rounded-md border px-3 bg-white text-sm"
+                                >
+                                  <option value="deposit">입금</option>
+                                  <option value="withdraw">출금</option>
+                                </select>
+                              </td>
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  value={numInputValue(entry.amount)}
+                                  onChange={(e) => updateCashFlow(account.id, entry.id, { amount: Number(e.target.value) })}
+                                  className="w-36 text-right"
+                                  placeholder="0"
+                                />
+                              </td>
+                              <td className="p-2">
+                                <Input
+                                  value={entry.memo}
+                                  onChange={(e) => updateCashFlow(account.id, entry.id, { memo: e.target.value })}
+                                  className="w-full"
+                                  placeholder="메모"
+                                />
+                              </td>
+                              <td className="p-2 text-center">
+                                <Button size="sm" variant="ghost" onClick={() => deleteCashFlow(account.id, entry.id)}>
+                                  <Trash2 className="w-4 h-4 text-rose-500" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </Card>

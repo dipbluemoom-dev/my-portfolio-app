@@ -149,9 +149,6 @@ export function AssetTrend() {
           <h2 className="text-2xl">자산 추이</h2>
           <div className="text-xs text-gray-500 mt-1">연초 시작 자산(1월 이전): ₩ -4,361,034</div>
         </div>
-        <div className="text-sm text-gray-500">
-          현재 자산 = (연초 시작액 + 누적 월 잔액) + 오준석 주식 + 통장 자산
-        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
