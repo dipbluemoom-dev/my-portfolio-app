@@ -79,6 +79,7 @@ interface CashFlowRecord {
 interface StockAccount {
   id: string;
   name: string;
+  cashHoldings: number;
   stocks: Stock[];
   cashFlows: CashFlowRecord[];
 }
@@ -122,6 +123,7 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
     return {
       id: String(a?.id ?? idx + 1),
       name: String(a?.name ?? `${idx + 1}번 계좌`),
+      cashHoldings: Number(a?.cashHoldings) || 0,
       cashFlows: Array.isArray(a?.cashFlows)
         ? a.cashFlows.map((f: any, fIdx: number) => ({
             id: String(f?.id ?? `${idx + 1}-cash-${fIdx + 1}`),
@@ -212,8 +214,8 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
       accounts.length > 0
         ? accounts
         : [
-            { id: '1', name: '1번 계좌', stocks: [], cashFlows: [] },
-            { id: '2', name: '2번 계좌', stocks: [], cashFlows: [] },
+            { id: '1', name: '1번 계좌', cashHoldings: 0, stocks: [], cashFlows: [] },
+            { id: '2', name: '2번 계좌', cashHoldings: 0, stocks: [], cashFlows: [] },
           ],
     exchangeRate,
     sellLedger: deduped,
@@ -249,8 +251,8 @@ export function StockPortfolio() {
     }
     return {
       accounts: [
-        { id: '1', name: '1번 계좌', stocks: [], cashFlows: [] },
-        { id: '2', name: '2번 계좌', stocks: [], cashFlows: [] },
+        { id: '1', name: '1번 계좌', cashHoldings: 0, stocks: [], cashFlows: [] },
+        { id: '2', name: '2번 계좌', cashHoldings: 0, stocks: [], cashFlows: [] },
       ],
       exchangeRate: 1350,
       sellLedger: [],
@@ -415,6 +417,7 @@ export function StockPortfolio() {
       const newAccount: StockAccount = {
         id: Date.now().toString(),
         name: `${prev.accounts.length + 1}번 계좌`,
+        cashHoldings: 0,
         stocks: [],
         cashFlows: [],
       };
@@ -427,6 +430,16 @@ export function StockPortfolio() {
       ...prev,
       accounts: prev.accounts.map((account) =>
         account.id === accountId ? { ...account, name } : account
+      ),
+    }));
+  };
+
+
+  const updateAccountCashHoldings = (accountId: string, cashHoldings: number) => {
+    setDataWithUndo('edit', (prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) =>
+        account.id === accountId ? { ...account, cashHoldings } : account
       ),
     }));
   };
@@ -809,7 +822,7 @@ export function StockPortfolio() {
     return total;
   }, [data.accounts, data.exchangeRate, tickerPrices]);
 
-  const getAccountTotalKRW = (account: StockAccount) => {
+  const getAccountStockTotalKRW = (account: StockAccount) => {
     const rate = Number(data.exchangeRate) || 0;
     return account.stocks.reduce((sum, stock) => {
       const k = tickerKey(stock.ticker, stock.currency);
@@ -818,6 +831,8 @@ export function StockPortfolio() {
       return sum + (stock.currency === 'USD' ? currentValue * rate : currentValue);
     }, 0);
   };
+
+  const getAccountTotalKRW = (account: StockAccount) => getAccountStockTotalKRW(account) + (Number(account.cashHoldings) || 0);
 
   const getAccountNetCashFlowKRW = (account: StockAccount) =>
     (Array.isArray(account.cashFlows) ? account.cashFlows : []).reduce((sum, entry) => {
@@ -1244,6 +1259,7 @@ export function StockPortfolio() {
                   <div className="text-sm text-gray-600">{account.name}</div>
                   <div className="text-3xl font-bold mt-1">₩ {fmt0(accountTotalKRW)}</div>
                   <div className="mt-2 text-xs text-gray-500">순입금액: ₩ {fmt0(accountNetCashFlowKRW)}</div>
+                  <div className="mt-1 text-xs text-gray-500">보유 현금: ₩ {fmt0(account.cashHoldings)}</div>
                   <div className={`mt-1 text-sm font-semibold ${accountPnLKRW >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}`}>
                     {accountPnLKRW >= 0 ? '수익' : '손실'} ₩ {fmt0(accountPnLKRW)} ({fmtPct(accountPnLPct)})
                   </div>
@@ -1268,6 +1284,14 @@ export function StockPortfolio() {
                   value={account.name}
                   onChange={(e) => updateAccountName(account.id, e.target.value)}
                   className="w-[200px]"
+                />
+                <span className="text-sm text-gray-600">현금 보유량</span>
+                <Input
+                  type="number"
+                  value={numInputValue(account.cashHoldings)}
+                  onChange={(e) => updateAccountCashHoldings(account.id, Number(e.target.value))}
+                  className="w-[160px] text-right"
+                  placeholder="0"
                 />
                 {data.accounts.length > 1 && (
                   <Button
@@ -1296,6 +1320,7 @@ export function StockPortfolio() {
               <div className="rounded-xl border bg-gray-50 p-3">
                 <div className="text-xs text-gray-500">현재 평가금액</div>
                 <div className="text-lg font-semibold">₩ {fmt0(getAccountTotalKRW(account))}</div>
+                <div className="text-xs text-gray-500 mt-1">주식 ₩ {fmt0(getAccountStockTotalKRW(account))} + 현금 ₩ {fmt0(account.cashHoldings)}</div>
               </div>
               <div className="rounded-xl border bg-gray-50 p-3">
                 {(() => {
@@ -1919,6 +1944,7 @@ export function StockPortfolio() {
           <div className="space-y-4">
             {data.accounts.map((account) => {
               const netCashFlow = getAccountNetCashFlowKRW(account);
+              const stockValuation = getAccountStockTotalKRW(account);
               const valuation = getAccountTotalKRW(account);
               const pnl = valuation - netCashFlow;
               const pct = netCashFlow !== 0 ? (pnl / netCashFlow) * 100 : 0;
@@ -1930,6 +1956,9 @@ export function StockPortfolio() {
                       <div className="font-semibold">{account.name}</div>
                       <div className="text-xs text-gray-500">
                         순입금액 ₩ {fmt0(netCashFlow)} · 현재 평가금액 ₩ {fmt0(valuation)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        주식 ₩ {fmt0(stockValuation)} · 현금 ₩ {fmt0(account.cashHoldings)}
                       </div>
                       <div className={`text-sm font-semibold mt-1 ${pnl >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}`}>
                         {pnl >= 0 ? '수익' : '손실'} ₩ {fmt0(pnl)} ({fmtPct(pct)})

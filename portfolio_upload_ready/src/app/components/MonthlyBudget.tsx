@@ -411,10 +411,12 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
             <Wallet className="w-8 h-8 text-amber-500" />
             <h1 className="text-2xl">월급 대비 지출 가이드</h1>
           </div>
-          <Button onClick={copyJanuaryToOtherMonths} variant="outline" className="gap-2">
-            <Copy className="w-4 h-4" />
-            1월 → 나머지 복제
-          </Button>
+          {selectedMonth === 1 && (
+            <Button onClick={copyJanuaryToOtherMonths} variant="outline" className="gap-2">
+              <Copy className="w-4 h-4" />
+              1월 → 나머지 복제
+            </Button>
+          )}
         </div>
 
         <Card className="p-4 bg-gradient-to-r from-amber-100 to-rose-100 text-slate-900 shadow-sm border border-amber-200/60">
