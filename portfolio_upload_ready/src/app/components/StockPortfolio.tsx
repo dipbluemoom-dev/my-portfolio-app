@@ -943,7 +943,6 @@ export function StockPortfolio() {
     }
 
     const items = Object.values(grouped)
-      .filter((g) => g.count > 1)
       .map((g) => {
         const profitLossKRW = g.currentValueKRW - g.buyCostKRW;
         const profitLossPct = g.buyCostKRW > 0 ? (profitLossKRW / g.buyCostKRW) * 100 : 0;
@@ -1768,10 +1767,10 @@ export function StockPortfolio() {
 
         </div>
 
-        {/* 동일 티커 합산(중복만) */}
+        {/* 티커별 합산 전체 */}
         {duplicateTickerSummary.length > 0 && (
           <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-3">동일 티커 합산 (중복 티커만)</h3>
+            <h3 className="text-lg font-semibold mb-3">티커별 합산 (전체)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {duplicateTickerSummary.map((g) => {
                 const weight = totalPortfolioBuyCostKRW > 0 ? (g.buyCostKRW / totalPortfolioBuyCostKRW) * 100 : 0;
@@ -1779,7 +1778,9 @@ export function StockPortfolio() {
                   <div key={g.ticker} className="p-4 rounded-2xl border bg-gray-50">
                     <div className="flex items-center justify-between">
                       <div className="text-lg font-bold">{g.ticker}</div>
-                      <div className="text-xs text-gray-500">{g.count}개 포지션 · 비중 {fmt2(weight)}%</div>
+                      <div className="text-xs text-gray-500">
+                        {g.count > 1 ? `${g.count}개 포지션 · ` : ''}비중 {fmt2(weight)}%
+                      </div>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                       <div className="p-2 rounded-lg bg-white border">
