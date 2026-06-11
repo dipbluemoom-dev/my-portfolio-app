@@ -76,7 +76,8 @@ interface Stock {
 interface CashFlowRecord {
   id: string;
   date: string;
-  type: 'deposit' | 'withdraw';
+  /** deposit=입금(원금) / withdraw=출금(원금) / adjust=조정·이월수익 (현금에는 포함, 원금에는 미포함) */
+  type: 'deposit' | 'withdraw' | 'adjust';
   amount: number;
   memo: string;
 }
@@ -135,7 +136,7 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
         ? a.cashFlows.map((f: any, fIdx: number) => ({
             id: String(f?.id ?? `${idx + 1}-cash-${fIdx + 1}`),
             date: String(f?.date ?? ''),
-            type: f?.type === 'withdraw' ? 'withdraw' : 'deposit',
+            type: f?.type === 'withdraw' ? 'withdraw' : f?.type === 'adjust' ? 'adjust' : 'deposit',
             amount: Number(f?.amount) || 0,
             memo: String(f?.memo ?? ''),
           }))
@@ -840,11 +841,20 @@ export function StockPortfolio() {
     }, 0);
   };
 
+  // ✅ 순입금액(원금) = 입금 − 출금. '조정(이월)'은 원금이 아니므로 제외
   const getAccountNetCashFlowKRW = (account: StockAccount) =>
     (Array.isArray(account.cashFlows) ? account.cashFlows : []).reduce((sum, entry) => {
+      if (entry.type === 'adjust') return sum;
       const amount = Number(entry.amount) || 0;
       return sum + (entry.type === 'withdraw' ? -amount : amount);
     }, 0);
+
+  // ✅ 조정(이월 수익 등) 합계 — 실제 현금에는 존재하지만 원금은 아닌 금액
+  const getAccountAdjustKRW = (account: StockAccount) =>
+    (Array.isArray(account.cashFlows) ? account.cashFlows : []).reduce(
+      (sum, entry) => sum + (entry.type === 'adjust' ? Number(entry.amount) || 0 : 0),
+      0
+    );
 
   // ✅ 보유종목 매수원가 합 (원화 환산)
   const getAccountHoldingCostKRW = (account: StockAccount) => {
@@ -867,10 +877,11 @@ export function StockPortfolio() {
     }, 0);
   };
 
-  // ✅ 자동 계산 현금 = 순입금액 − 보유원가 + 실현손익
+  // ✅ 자동 계산 현금 = 순입금액 + 조정(이월) − 보유원가 + 실현손익
+  //    조정 = 기록 시작 전(예: 작년) 발생한 수익 등, 실제 현금에 있지만 원금이 아닌 금액
   //    (매수/매도 기록이 정확히 입력돼 있어야 맞음. USD는 현재 환율 기준 환산)
   const getAutoCashKRW = (account: StockAccount) =>
-    getAccountNetCashFlowKRW(account) - getAccountHoldingCostKRW(account) + getAccountRealizedPnLKRW(account.id);
+    getAccountNetCashFlowKRW(account) + getAccountAdjustKRW(account) - getAccountHoldingCostKRW(account) + getAccountRealizedPnLKRW(account.id);
 
   // ✅ 화면·합계에 사용할 실효 현금
   const getEffectiveCashKRW = (account: StockAccount) =>
@@ -1447,7 +1458,7 @@ export function StockPortfolio() {
                     readOnly
                     value={fmt0(getAutoCashKRW(account))}
                     className="tnum w-[160px] text-right"
-                    title="자동 계산: 순입금액 − 보유원가 + 실현손익"
+                    title="자동 계산: 순입금액 + 조정(이월) − 보유원가 + 실현손익"
                   />
                 ) : (
                   <Input
@@ -1462,7 +1473,7 @@ export function StockPortfolio() {
                   variant={account.autoCash ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => toggleAutoCash(account.id)}
-                  title="자동: 순입금액 − 보유종목 매수원가 + 실현손익 (USD는 현재 환율 환산)"
+                  title="자동: 순입금액 + 조정(이월) − 보유종목 매수원가 + 실현손익 (USD는 현재 환율 환산)"
                 >
                   {account.autoCash ? '자동 ON' : '자동 OFF'}
                 </Button>
@@ -1492,8 +1503,11 @@ export function StockPortfolio() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               <div className="rounded-xl border bg-secondary/60 p-3">
-                <div className="text-xs text-muted-foreground">순입금액</div>
-                <div className="text-lg font-semibold">₩ {fmt0(getAccountNetCashFlowKRW(account))}</div>
+                <div className="text-xs text-muted-foreground">순입금액 <span className="text-muted-foreground/60">(원금)</span></div>
+                <div className="tnum text-lg font-semibold">₩ {fmt0(getAccountNetCashFlowKRW(account))}</div>
+                {getAccountAdjustKRW(account) !== 0 && (
+                  <div className="tnum mt-1 text-xs text-muted-foreground">조정(이월) ₩ {fmt0(getAccountAdjustKRW(account))} 별도</div>
+                )}
               </div>
               <div className="rounded-xl border bg-secondary/60 p-3">
                 <div className="text-xs text-muted-foreground">현재 평가금액 <span className="text-muted-foreground/60">= 주식 평가 + 현금</span></div>
@@ -2126,8 +2140,8 @@ export function StockPortfolio() {
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-3">
                     <div>
                       <div className="font-semibold">{account.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        순입금액 ₩ {fmt0(netCashFlow)} · 현재 평가금액 ₩ {fmt0(valuation)}
+                      <div className="tnum text-xs text-muted-foreground">
+                        순입금액 ₩ {fmt0(netCashFlow)}{getAccountAdjustKRW(account) !== 0 ? ` · 조정 ₩ ${fmt0(getAccountAdjustKRW(account))}` : ''} · 현재 평가금액 ₩ {fmt0(valuation)}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         주식 ₩ {fmt0(stockValuation)} · 현금 ₩ {fmt0(getEffectiveCashKRW(account))}
@@ -2185,11 +2199,12 @@ export function StockPortfolio() {
                               <td className="p-2">
                                 <select
                                   value={entry.type}
-                                  onChange={(e) => updateCashFlow(account.id, entry.id, { type: e.target.value as 'deposit' | 'withdraw' })}
+                                  onChange={(e) => updateCashFlow(account.id, entry.id, { type: e.target.value as 'deposit' | 'withdraw' | 'adjust' })}
                                   className="h-9 rounded-md border px-3 bg-white text-sm"
                                 >
                                   <option value="deposit">입금</option>
                                   <option value="withdraw">출금</option>
+                                  <option value="adjust">조정(이월)</option>
                                 </select>
                               </td>
                               <td className="p-2">
