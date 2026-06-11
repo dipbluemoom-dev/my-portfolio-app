@@ -1330,28 +1330,45 @@ export function StockPortfolio() {
           .filter((g) => g.buyCostKRW > 0 && g.ticker && g.ticker !== '티커명')
           .sort((a, b) => a.profitLossPct - b.profitLossPct);
         if (perfRows.length === 0) return null;
-        const maxAbsPct = Math.max(...perfRows.map((r) => Math.abs(r.profitLossPct)), 0.0001);
+
+        // ✅ 동적 0% 축: 음수만 있으면 축이 오른쪽 끝, 양수만 있으면 왼쪽 끝
+        //    → 빈 절반 없이 전체 폭을 그래프로 사용
+        const negSpan = Math.max(0, -Math.min(...perfRows.map((r) => r.profitLossPct)));
+        const posSpan = Math.max(0, Math.max(...perfRows.map((r) => r.profitLossPct)));
+        const span = Math.max(negSpan + posSpan, 0.0001);
+        const axisPct = (negSpan / span) * 100; // 0% 축의 가로 위치(%)
+
+        // ✅ 적응형 밀도: 종목 수가 늘어나도 카드 안에서 촘촘하게
+        const n = perfRows.length;
+        const barH = n <= 8 ? 'h-4' : n <= 14 ? 'h-3' : n <= 22 ? 'h-2.5' : 'h-2';
+        const gapY = n <= 8 ? 'space-y-1' : n <= 14 ? 'space-y-[3px]' : 'space-y-0.5';
+        const labelText = n <= 14 ? 'text-xs' : 'text-[11px]';
+
         return (
           <Card className="overflow-hidden">
             <div className="border-b border-border px-5 py-3.5">
               <div className="eyebrow">Performance</div>
               <h2>종목별 수익률 (%) — 매수원가 대비</h2>
             </div>
-            <div className="space-y-1 px-5 py-4">
+            <div className={`px-4 py-4 ${gapY}`}>
               {perfRows.map((g) => {
                 const positive = g.profitLossPct >= 0;
+                const w = Math.max((Math.abs(g.profitLossPct) / span) * 100, 0.8);
                 return (
-                  <div key={g.ticker} className="flex items-center gap-3">
-                    <span className="tnum w-16 shrink-0 truncate text-xs font-semibold">{g.ticker}</span>
-                    <div className="relative h-4 flex-1 overflow-hidden rounded-sm bg-secondary">
-                      {/* 중앙 0% 축 */}
-                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border" />
+                  <div key={g.ticker} className="flex items-center gap-2">
+                    <span className={`tnum w-12 shrink-0 truncate ${labelText} font-semibold`}>{g.ticker}</span>
+                    <div className={`relative ${barH} flex-1 overflow-hidden rounded-sm bg-secondary`}>
+                      <div className="absolute inset-y-0 w-px bg-border" style={{ left: `${axisPct}%` }} />
                       <div
-                        className={`absolute inset-y-0 ${positive ? 'left-1/2 rounded-r-sm bg-gain' : 'right-1/2 rounded-l-sm bg-loss'}`}
-                        style={{ width: `${Math.max((Math.abs(g.profitLossPct) / maxAbsPct) * 50, 0.8)}%` }}
+                        className={`absolute inset-y-0 ${positive ? 'rounded-r-sm bg-gain' : 'rounded-l-sm bg-loss'}`}
+                        style={
+                          positive
+                            ? { left: `${axisPct}%`, width: `${Math.min(w, 100 - axisPct)}%` }
+                            : { right: `${100 - axisPct}%`, width: `${Math.min(w, axisPct)}%` }
+                        }
                       />
                     </div>
-                    <span className={`tnum w-24 shrink-0 text-right text-xs font-semibold ${positive ? 'text-gain' : 'text-loss'}`}>
+                    <span className={`tnum w-16 shrink-0 text-right ${labelText} font-semibold ${positive ? 'text-gain' : 'text-loss'}`}>
                       {positive ? '+' : ''}{fmtPct(g.profitLossPct)}
                     </span>
                   </div>
@@ -1413,8 +1430,8 @@ export function StockPortfolio() {
       })()}
       </div>
 
-      {/* 계좌 섹션 — 가로 2컬럼 (테이블은 가로 스크롤) */}
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+      {/* 계좌 섹션 */}
+      <div className="space-y-6">
         {data.accounts.map((account) => (
           <Card key={account.id} className="p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
