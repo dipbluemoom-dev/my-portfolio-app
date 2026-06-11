@@ -1323,7 +1323,7 @@ export function StockPortfolio() {
         })}
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       {/* ✅ 종목별 수익률 — 전체 계좌 티커 합산, 매수원가 대비 */}
       {(() => {
         const perfRows = duplicateTickerSummary
@@ -1341,16 +1341,15 @@ export function StockPortfolio() {
         // ✅ 적응형 밀도: 종목 수가 늘어나도 카드 안에서 촘촘하게
         const n = perfRows.length;
         const barH = n <= 8 ? 'h-4' : n <= 14 ? 'h-3' : n <= 22 ? 'h-2.5' : 'h-2';
-        const gapY = n <= 8 ? 'space-y-1' : n <= 14 ? 'space-y-[3px]' : 'space-y-0.5';
         const labelText = n <= 14 ? 'text-xs' : 'text-[11px]';
 
         return (
-          <Card className="overflow-hidden">
+          <Card className="h-full overflow-hidden">
             <div className="border-b border-border px-5 py-3.5">
               <div className="eyebrow">Performance</div>
               <h2>종목별 수익률 (%) — 매수원가 대비</h2>
             </div>
-            <div className={`px-4 py-4 ${gapY}`}>
+            <div className="flex flex-1 flex-col justify-evenly gap-0.5 px-4 py-3">
               {perfRows.map((g) => {
                 const positive = g.profitLossPct >= 0;
                 const w = Math.max((Math.abs(g.profitLossPct) / span) * 100, 0.8);
@@ -1391,16 +1390,16 @@ export function StockPortfolio() {
           return row;
         });
         return (
-          <Card className="overflow-hidden">
+          <Card className="h-full overflow-hidden">
             <div className="border-b border-border px-5 py-3.5">
               <div className="eyebrow">Realized P/L Trend</div>
               <h2>손익 추이 — 월별 실현손익</h2>
             </div>
-            <div className="px-3 py-4">
+            <div className="flex flex-1 flex-col px-3 py-4">
               {!hasAny ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">매도 기록이 입력되면 추이가 표시됩니다</div>
               ) : (
-                <div className="h-72">
+                <div className="min-h-72 flex-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={trendData} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
                       <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#80766a" />
