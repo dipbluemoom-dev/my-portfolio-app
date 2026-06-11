@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js';
 import { MonthlyBudget } from './components/MonthlyBudget';
 import { Tabs, TabsContent, TabsList, TabsTrigger, Button, Input } from './components/ui';
-import { Wallet, TrendingUp, List, Landmark, LineChart, Save } from 'lucide-react';
+import { Wallet, TrendingUp, Save } from 'lucide-react';
 import {
   isSupabaseConfigured,
   supabase,
@@ -18,15 +18,6 @@ import {
 // ✅ 탭별 lazy-load — 초기 번들 가볍게
 const StockPortfolio = lazy(() =>
   import('./components/StockPortfolio').then((m) => ({ default: m.StockPortfolio }))
-);
-const StockWatchlist = lazy(() =>
-  import('./components/StockWatchlist').then((m) => ({ default: m.StockWatchlist }))
-);
-const BankAccounts = lazy(() =>
-  import('./components/BankAccounts').then((m) => ({ default: m.BankAccounts }))
-);
-const AssetTrend = lazy(() =>
-  import('./components/AssetTrend').then((m) => ({ default: m.AssetTrend }))
 );
 
 // ============================================================
@@ -278,13 +269,10 @@ export default function App() {
         <CloudSyncPanel />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-4 h-auto bg-white/80 backdrop-blur shadow-md rounded-xl p-1">
+          <TabsList className="grid w-full grid-cols-2 mb-4 h-auto bg-white/80 backdrop-blur shadow-md rounded-xl p-1">
             {[
-              { value: 'budget',    icon: <Wallet className="w-5 h-5" />,     label: '지출관리', active: 'bg-amber-50 border-amber-100' },
-              { value: 'stocks',    icon: <TrendingUp className="w-5 h-5" />, label: '주식',     active: 'bg-rose-50 border-rose-100' },
-              { value: 'watchlist', icon: <List className="w-5 h-5" />,       label: '주식 일정표', active: 'bg-violet-50 border-violet-100' },
-              { value: 'banks',     icon: <Landmark className="w-5 h-5" />,   label: '통장',     active: 'bg-orange-50 border-orange-100' },
-              { value: 'trend',     icon: <LineChart className="w-5 h-5" />,  label: '자산 추이', active: 'bg-pink-50 border-pink-100' },
+              { value: 'budget', icon: <Wallet className="w-5 h-5" />,     label: '지출관리', active: 'bg-amber-50 border-amber-100' },
+              { value: 'stocks', icon: <TrendingUp className="w-5 h-5" />, label: '주식',     active: 'bg-rose-50 border-rose-100' },
             ].map(({ value, icon, label, active }) => (
               <TabsTrigger
                 key={value}
@@ -321,15 +309,6 @@ export default function App() {
           </TabsContent>
           <TabsContent value="stocks" className="mt-0">
             <Suspense fallback={<TabFallback />}><StockPortfolio /></Suspense>
-          </TabsContent>
-          <TabsContent value="watchlist" className="mt-0">
-            <Suspense fallback={<TabFallback />}><StockWatchlist /></Suspense>
-          </TabsContent>
-          <TabsContent value="banks" className="mt-0">
-            <Suspense fallback={<TabFallback />}><BankAccounts /></Suspense>
-          </TabsContent>
-          <TabsContent value="trend" className="mt-0">
-            <Suspense fallback={<TabFallback />}><AssetTrend /></Suspense>
           </TabsContent>
         </Tabs>
       </div>

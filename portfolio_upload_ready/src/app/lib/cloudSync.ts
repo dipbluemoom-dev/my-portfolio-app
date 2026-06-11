@@ -22,9 +22,6 @@ export const supabase = isSupabaseConfigured
 /** 동기화 대상 localStorage 키 목록 */
 export const SYNC_KEYS: string[] = [
   'stockPortfolio',
-  'stockWatchlist',
-  'bankAccounts',
-  'assetTrend',
   ...Array.from({ length: 12 }, (_, i) => `monthlyBudget_${i + 1}`),
 ];
 
