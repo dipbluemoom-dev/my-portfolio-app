@@ -7,13 +7,9 @@ import {
   Edit2,
   Check,
   X,
-  Wallet,
-  CreditCard,
-  Home,
   ChevronDown,
   ChevronUp,
   GripVertical,
-  TrendingUp,
   Copy,
 } from 'lucide-react';
 import { Button, Input, Card } from './ui';
@@ -291,30 +287,40 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
   const remainingSalary = totalIncomeSalary - totalExpenses;
   const numberInputValue = (value: number) => (value === 0 ? '' : String(value));
 
+  // ── 지출 구성 차트 데이터 (표시용 — 저장 데이터는 건드리지 않음) ──
+  const expenseRows = [
+    ...data.fixedCosts.map((i) => ({ name: i.name, category: '고정비', total: calculateItemTotal(i) })),
+    ...data.livingExpenses.map((i) => ({ name: i.name, category: '생활비', total: calculateItemTotal(i) })),
+    ...data.accountExpenses.map((i) => ({ name: i.name, category: '계좌', total: calculateItemTotal(i) })),
+  ]
+    .filter((r) => r.total > 0)
+    .sort((a, b) => b.total - a.total);
+  const maxExpenseRow = expenseRows[0]?.total || 0;
+
   const renderSubItem = (subItem: SubItem, itemId: string, category: BudgetCategory) => {
     return (
       <div key={subItem.id} className="flex items-center gap-2">
         <Input
           value={subItem.description}
           onChange={(e) => updateSubItem(category, itemId, subItem.id, { description: e.target.value })}
-          className="flex-1"
+          className="h-8 flex-1"
           placeholder="내용"
         />
         <Input
           type="number"
           value={numberInputValue(subItem.amount)}
           onChange={(e) => updateSubItem(category, itemId, subItem.id, { amount: Number(e.target.value) })}
-          className="w-32"
+          className="tnum h-8 w-32 text-right"
           placeholder="금액"
         />
         <Input
           type="date"
           value={subItem.date}
           onChange={(e) => updateSubItem(category, itemId, subItem.id, { date: e.target.value })}
-          className="w-32"
+          className="tnum h-8 w-36"
         />
-        <Button size="sm" variant="ghost" onClick={() => deleteSubItem(category, itemId, subItem.id)}>
-          <Trash2 className="w-4 h-4 text-rose-500" />
+        <Button size="icon" variant="ghost" onClick={() => deleteSubItem(category, itemId, subItem.id)}>
+          <Trash2 className="w-4 h-4" />
         </Button>
       </div>
     );
@@ -333,63 +339,72 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
         category={category}
         moveItem={(dragIndex, hoverIndex) => moveItem(category, dragIndex, hoverIndex)}
         renderContent={() => (
-          <div className="mb-2">
-            <div className="flex items-center gap-2 py-2 border-b border-gray-200">
-              <GripVertical className="w-4 h-4 text-gray-400" />
+          <div className="border-b border-border last:border-0">
+            <div className="group flex items-center gap-2 py-2">
+              <GripVertical className="w-4 h-4 shrink-0 text-border group-hover:text-muted-foreground" />
 
               {isEditing ? (
                 <>
-                  <Input value={editValue.name} onChange={(e) => setEditValue({ ...editValue, name: e.target.value })} className="flex-1" />
+                  <Input value={editValue.name} onChange={(e) => setEditValue({ ...editValue, name: e.target.value })} className="h-8 flex-1" />
                   <Input
                     type="number"
                     value={numberInputValue(editValue.amount)}
                     onChange={(e) => setEditValue({ ...editValue, amount: Number(e.target.value) })}
-                    className="w-32"
+                    className="tnum h-8 w-32 text-right"
                   />
-                  <Button size="sm" variant="ghost" onClick={() => saveEdit(category)}>
-                    <Check className="w-4 h-4 text-emerald-500" />
+                  <Button size="icon" variant="ghost" onClick={() => saveEdit(category)}>
+                    <Check className="w-4 h-4 text-income" />
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={cancelEdit}>
-                    <X className="w-4 h-4 text-rose-500" />
+                  <Button size="icon" variant="ghost" onClick={cancelEdit}>
+                    <X className="w-4 h-4 text-expense" />
                   </Button>
                 </>
               ) : (
                 <>
-                  <Button size="sm" variant="ghost" onClick={() => toggleExpand(item.id)}>
+                  <button
+                    onClick={() => toggleExpand(item.id)}
+                    className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:bg-secondary hover:text-foreground"
+                  >
                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </Button>
-                  <span className="flex-1">{item.name}</span>
-                  <span className={`w-32 text-right font-semibold ${(item.subItems?.length || 0) > 0 ? 'text-amber-700/80' : ''}`}>
+                  </button>
+                  <span className="flex-1 truncate text-sm">{item.name}</span>
+                  {item.subItems && item.subItems.length > 0 && (
+                    <span className="tnum rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                      {item.subItems.length}건
+                    </span>
+                  )}
+                  <span className="tnum w-32 shrink-0 text-right text-sm font-medium">
                     {itemTotal.toLocaleString()}원
                   </span>
-                  {item.subItems && item.subItems.length > 0 && <span className="text-xs text-gray-500">({item.subItems.length}개)</span>}
-                  <Button size="sm" variant="ghost" onClick={() => startEdit(item)}>
-                    <Edit2 className="w-4 h-4" />
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => deleteItem(category, item.id)}>
-                    <Trash2 className="w-4 h-4 text-rose-500" />
-                  </Button>
+                  <div className="flex items-center opacity-40 transition-opacity group-hover:opacity-100">
+                    <Button size="icon" variant="ghost" onClick={() => startEdit(item)}>
+                      <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => deleteItem(category, item.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </>
               )}
             </div>
 
             {isExpanded && (
-              <div className="ml-8 mt-2 p-3 bg-white rounded border">
+              <div className="mb-3 ml-8 rounded-md border border-border bg-background p-3">
                 <div className="space-y-2">
                   {item.subItems && item.subItems.length > 0 && (
                     <>
-                      <div className="flex gap-2 text-xs text-gray-600 font-semibold pb-2 border-b">
+                      <div className="flex gap-2 border-b border-border pb-2 text-[11px] font-medium text-muted-foreground">
                         <span className="flex-1">내용</span>
-                        <span className="w-32">금액</span>
-                        <span className="w-32">날짜</span>
-                        <span className="w-10"></span>
+                        <span className="w-32 text-right">금액</span>
+                        <span className="w-36">날짜</span>
+                        <span className="w-8"></span>
                       </div>
                       {item.subItems.map((subItem) => renderSubItem(subItem, item.id, category))}
                     </>
                   )}
 
-                  <Button size="sm" variant="outline" onClick={() => addSubItem(category, item.id)} className="w-full mt-2">
-                    <Plus className="w-4 h-4 mr-1" />
+                  <Button size="sm" variant="outline" onClick={() => addSubItem(category, item.id)} className="w-full">
+                    <Plus className="w-4 h-4" />
                     세부 항목 추가
                   </Button>
                 </div>
@@ -401,140 +416,149 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
     );
   };
 
+  // ── 섹션 카드 공통 렌더러 (표시 전용) ──
+  const renderSection = (
+    eyebrow: string,
+    title: string,
+    tone: 'expense' | 'income',
+    total: number,
+    category: BudgetCategory,
+    items: BudgetItem[]
+  ) => (
+    <Card className="overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+        <div className="flex items-center gap-3">
+          <span className={`h-4 w-1 rounded-full ${tone === 'income' ? 'bg-income' : 'bg-expense'}`} />
+          <div className="leading-tight">
+            <div className="eyebrow">{eyebrow}</div>
+            <h2>{title}</h2>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className={`tnum text-base font-semibold ${tone === 'income' ? 'text-income' : 'text-foreground'}`}>
+            {total.toLocaleString()}원
+          </span>
+          <Button onClick={() => addItem(category)} size="sm" variant="outline">
+            <Plus className="w-4 h-4" />
+            추가
+          </Button>
+        </div>
+      </div>
+      <div className="px-5 py-1">
+        {items.map((item, index) => renderItem(item, category, index))}
+        {items.length === 0 && (
+          <div className="py-6 text-center text-sm text-muted-foreground">항목을 추가해주세요</div>
+        )}
+      </div>
+    </Card>
+  );
+
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className="space-y-4 p-4 md:p-6 max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-2 gap-3">
-          <div className="flex items-center gap-3">
-            <Wallet className="w-8 h-8 text-amber-500" />
-            <h1 className="text-2xl">월급 대비 지출 가이드</h1>
+      <div className="mx-auto max-w-4xl space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="leading-tight">
+            <div className="eyebrow">Monthly Budget — {selectedMonth}월</div>
+            <h1>월급 대비 지출 가이드</h1>
           </div>
           {selectedMonth === 1 && (
-            <Button onClick={copyJanuaryToOtherMonths} variant="outline" className="gap-2">
+            <Button onClick={copyJanuaryToOtherMonths} variant="outline" size="sm">
               <Copy className="w-4 h-4" />
               1월 → 나머지 복제
             </Button>
           )}
         </div>
 
-        <Card className="p-4 bg-gradient-to-r from-amber-100 to-rose-100 text-slate-900 shadow-sm border border-amber-200/60">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl">월급</h2>
+        {/* 월급 */}
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4">
+            <div className="flex items-center gap-3">
+              <span className="h-4 w-1 rounded-full bg-foreground" />
+              <div className="leading-tight">
+                <div className="eyebrow">Salary</div>
+                <h2>월급</h2>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <Input
                 type="number"
                 value={numberInputValue(data.salary)}
                 onChange={(e) => setData({ ...data, salary: Number(e.target.value) })}
-                className="w-48 bg-white/80 text-slate-900"
+                className="tnum w-44 text-right"
+                placeholder="0"
               />
-              <span className="text-xl font-bold">원</span>
+              <span className="text-sm text-muted-foreground">원</span>
             </div>
           </div>
         </Card>
 
-        <Card className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 shadow-md">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Home className="w-5 h-5 text-orange-500" />
-              <h2 className="text-xl text-slate-800">고정비</h2>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-slate-700">{totalFixedCosts.toLocaleString()}원</div>
-              <Button onClick={() => addItem('fixedCosts')} size="sm" className="bg-orange-200 hover:bg-orange-300 text-slate-900 border border-orange-200">
-                <Plus className="w-4 h-4 mr-1" />
-                추가
-              </Button>
-            </div>
-          </div>
-          <div>{data.fixedCosts.map((item, index) => renderItem(item, 'fixedCosts', index))}</div>
-        </Card>
+        {renderSection('Fixed', '고정비', 'expense', totalFixedCosts, 'fixedCosts', data.fixedCosts)}
+        {renderSection('Living', '생활비 (카드)', 'expense', totalLivingExpenses, 'livingExpenses', data.livingExpenses)}
+        {renderSection('Account', '계좌 지출비', 'expense', totalAccountExpenses, 'accountExpenses', data.accountExpenses)}
+        {renderSection('Extra Income', '추가 소득', 'income', totalIncome, 'income', data.income)}
 
-        <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 border-green-200 shadow-md">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-emerald-500" />
-              <h2 className="text-xl text-slate-800">생활비 (카드)</h2>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-slate-700">{totalLivingExpenses.toLocaleString()}원</div>
-              <Button onClick={() => addItem('livingExpenses')} size="sm" className="bg-emerald-200 hover:bg-emerald-300 text-slate-900 border border-emerald-200">
-                <Plus className="w-4 h-4 mr-1" />
-                추가
-              </Button>
-            </div>
+        {/* 월별 요약 */}
+        <Card className="overflow-hidden">
+          <div className="border-b border-border px-5 py-3.5">
+            <div className="eyebrow">Summary</div>
+            <h2>월별 요약 — {selectedMonth}월</h2>
           </div>
-          <div>
-            {data.livingExpenses.map((item, index) => renderItem(item, 'livingExpenses', index))}
-            {data.livingExpenses.length === 0 && <div className="text-center text-gray-500 py-4">항목을 추가해주세요</div>}
-          </div>
-        </Card>
 
-        <Card className="p-4 bg-gradient-to-br from-rose-50 to-amber-100 border-rose-200 shadow-md">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Wallet className="w-5 h-5 text-amber-600" />
-              <h2 className="text-xl text-slate-800">계좌 지출비</h2>
+          <div className="px-5 py-4">
+            <div className="grid grid-cols-1 gap-x-10 md:grid-cols-2">
+              <div className="flex items-center justify-between border-b border-border py-2.5 text-sm">
+                <span className="text-muted-foreground">월급</span>
+                <span className="tnum font-medium">{data.salary.toLocaleString()}원</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-border py-2.5 text-sm">
+                <span className="text-muted-foreground">추가 소득</span>
+                <span className="tnum font-medium">{totalIncome.toLocaleString()}원</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-border py-2.5 text-sm">
+                <span className="text-muted-foreground">총 수입</span>
+                <span className="tnum font-semibold text-income">{totalIncomeSalary.toLocaleString()}원</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-border py-2.5 text-sm">
+                <span className="text-muted-foreground">총 지출</span>
+                <span className="tnum font-semibold text-expense">{totalExpenses.toLocaleString()}원</span>
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-slate-700">{totalAccountExpenses.toLocaleString()}원</div>
-              <Button onClick={() => addItem('accountExpenses')} size="sm" className="bg-amber-200 hover:bg-amber-300 text-slate-900 border border-amber-200">
-                <Plus className="w-4 h-4 mr-1" />
-                추가
-              </Button>
-            </div>
-          </div>
-          <div>
-            {data.accountExpenses.map((item, index) => renderItem(item, 'accountExpenses', index))}
-            {data.accountExpenses.length === 0 && <div className="text-center text-gray-500 py-4">항목을 추가해주세요</div>}
-          </div>
-        </Card>
 
-        {/* ✅ 추가 소득: 계좌 지출비 하단 */}
-        <Card className="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200 shadow-md">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-500" />
-              <h2 className="text-xl text-slate-800">추가 소득</h2>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-lg font-semibold text-slate-700">{totalIncome.toLocaleString()}원</div>
-              <Button onClick={() => addItem('income')} size="sm" className="bg-emerald-200 hover:bg-emerald-300 text-slate-900 border border-emerald-200">
-                <Plus className="w-4 h-4 mr-1" />
-                추가
-              </Button>
-            </div>
-          </div>
-          <div>
-            {data.income.map((item, index) => renderItem(item, 'income', index))}
-            {data.income.length === 0 && <div className="text-center text-gray-500 py-4">항목을 추가해주세요</div>}
-          </div>
-        </Card>
-
-        <Card className="p-6 bg-gradient-to-r from-rose-100 to-amber-100 text-slate-900 shadow-sm border border-rose-200/60">
-          <h2 className="text-2xl mb-4">월별 요약</h2>
-          <div className="grid grid-cols-2 gap-4 text-lg">
-            <div className="flex justify-between">
-              <span>월급:</span>
-              <span className="font-bold">{data.salary.toLocaleString()}원</span>
-            </div>
-            <div className="flex justify-between">
-              <span>추가 소득:</span>
-              <span className="font-bold">{totalIncome.toLocaleString()}원</span>
-            </div>
-            <div className="flex justify-between">
-              <span>총 수입:</span>
-              <span className="font-bold text-amber-700">{totalIncomeSalary.toLocaleString()}원</span>
-            </div>
-            <div className="flex justify-between">
-              <span>총 지출:</span>
-              <span className="font-bold">{totalExpenses.toLocaleString()}원</span>
-            </div>
-            <div className="col-span-2 flex justify-between pt-4 border-t-2 border-slate-200/70">
-              <span className="text-xl">잔액:</span>
-              <span className={`text-2xl font-bold ${remainingSalary >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+            <div className="mt-4 flex items-baseline justify-between">
+              <span className="text-sm text-muted-foreground">잔액 (총 수입 − 총 지출)</span>
+              <span className={`tnum text-2xl font-semibold ${remainingSalary >= 0 ? 'text-income' : 'text-expense'}`}>
                 {remainingSalary.toLocaleString()}원
               </span>
             </div>
+          </div>
+
+          {/* 지출 구성 차트 */}
+          <div className="border-t border-border px-5 py-4">
+            <div className="eyebrow mb-3">지출 구성 — 항목별 금액</div>
+            {expenseRows.length === 0 ? (
+              <div className="py-4 text-center text-sm text-muted-foreground">
+                지출 항목에 금액을 입력하면 구성이 표시됩니다
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {expenseRows.map((row, idx) => (
+                  <div key={`${row.name}-${idx}`} className="flex items-center gap-3">
+                    <span className="w-32 shrink-0 truncate text-xs text-muted-foreground" title={`${row.name} (${row.category})`}>
+                      {row.name}
+                    </span>
+                    <div className="h-4 flex-1 overflow-hidden rounded-sm bg-secondary">
+                      <div
+                        className="h-full rounded-sm bg-expense"
+                        style={{ width: `${maxExpenseRow > 0 ? Math.max((row.total / maxExpenseRow) * 100, 1.5) : 0}%` }}
+                      />
+                    </div>
+                    <span className="tnum w-28 shrink-0 text-right text-xs font-medium text-expense">
+                      {row.total.toLocaleString()}원
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </Card>
       </div>

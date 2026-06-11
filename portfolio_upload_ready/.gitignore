@@ -1,19 +1,7 @@
-# 의존성
-node_modules/
-
-# 빌드 결과물
-/dist/
-/build/
-
-# 캐시
-.cache/
-.vite/
-
-# 환경 변수 (절대 커밋 금지)
+node_modules
+dist
 .env
 .env.*
-!.env.example
-
-# OS 메타파일
+*.local
 .DS_Store
-Thumbs.db
+.vercel

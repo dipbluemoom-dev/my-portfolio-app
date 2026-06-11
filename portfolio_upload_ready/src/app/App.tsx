@@ -188,24 +188,42 @@ function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void }) {
   }, [onToast, pushOnce, userId]);
 
   return (
-    <div className="p-4 rounded-2xl border bg-white shadow-sm mb-4">
-      <div className="font-semibold mb-2">동기화</div>
-      <div className="flex gap-2 items-center flex-wrap">
-        <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" className="w-full sm:w-64" />
-        <Button onClick={sendMagicLink} disabled={status === 'sending'}>로그인 링크 받기</Button>
-        <Button variant="outline" onClick={manualSave} disabled={!userId}>저장</Button>
-      </div>
-      <div className="mt-2 text-sm">
-        {status === 'error'
-          ? <span className="text-rose-500">{message}</span>
-          : <span className="text-gray-700">{message}</span>}
-      </div>
-      <div className="mt-2 text-xs text-gray-400">
-        자동 동기화: 서버 확인 5분 / 자동 업로드 30초
-        {autoReloadDisabled && (
-          <span className="block text-amber-700/80 mt-1">* 이 기기(브라우저)는 저장소가 제한돼서 자동 새로고침을 껐어. 필요한 경우 직접 새로고침만 해줘.</span>
+    <div className="rounded-lg border border-border bg-card mb-6">
+      <div className="flex flex-wrap items-center gap-3 px-5 py-3.5">
+        <div className="flex items-center gap-2 mr-2">
+          <span
+            className={`inline-block size-2 rounded-full ${
+              status === 'loggedIn' ? 'bg-income' : status === 'error' ? 'bg-expense' : 'bg-border'
+            }`}
+          />
+          <span className="eyebrow">동기화</span>
+        </div>
+        <Input
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="이메일 주소"
+          className="w-full sm:w-64"
+        />
+        <Button variant="outline" size="sm" onClick={sendMagicLink} disabled={status === 'sending'}>
+          로그인 링크 받기
+        </Button>
+        <Button variant="outline" size="sm" onClick={manualSave} disabled={!userId}>
+          지금 저장
+        </Button>
+        {message && (
+          <span className={`text-xs ${status === 'error' ? 'text-expense' : 'text-muted-foreground'}`}>
+            {message}
+          </span>
         )}
+        <span className="ml-auto hidden text-xs text-muted-foreground/70 md:inline">
+          자동 동기화 · 확인 5분 / 업로드 30초
+        </span>
       </div>
+      {autoReloadDisabled && (
+        <div className="border-t border-border px-5 py-2 text-xs text-muted-foreground">
+          * 이 기기(브라우저)는 저장소가 제한돼서 자동 새로고침을 껐어. 필요한 경우 직접 새로고침만 해줘.
+        </div>
+      )}
     </div>
   );
 }
@@ -216,7 +234,11 @@ function CloudSyncPanel({ onToast }: { onToast?: (msg: string) => void }) {
 const MONTHS = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: `${i + 1}월` }));
 
 function TabFallback() {
-  return <div className="p-6 bg-white rounded-2xl border shadow-sm text-sm text-gray-500">불러오는 중…</div>;
+  return (
+    <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+      불러오는 중…
+    </div>
+  );
 }
 
 export default function App() {
@@ -248,59 +270,60 @@ export default function App() {
   }, [user]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50 to-rose-50">
-      <div className="container mx-auto py-4 md:py-8 px-2 md:px-4">
-        {/* 헤더 */}
-        <div className="mb-6 relative">
-          <div className="text-center">
-            <h1 className="text-3xl md:text-4xl mb-2 bg-gradient-to-r from-rose-300 to-amber-300 bg-clip-text text-transparent">
-              자산 포트폴리오
-            </h1>
+    <div className="min-h-screen bg-background">
+      {/* ── 헤더 ───────────────────────────────────── */}
+      <header className="border-b border-border bg-card">
+        <div className="container mx-auto flex items-center justify-between px-4 py-4 md:px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <span className="tnum text-sm font-semibold">₩</span>
+            </div>
+            <div className="leading-tight">
+              <div className="eyebrow">Personal Finance</div>
+              <div className="text-base font-semibold tracking-tight">자산 포트폴리오</div>
+            </div>
           </div>
-          <div className="absolute top-0 right-0 flex items-center gap-2">
-            <Button onClick={handleSave} disabled={isSaving} variant="outline" className="bg-white">
-              <Save className="w-4 h-4 mr-1" />
+          <div className="flex items-center gap-3">
+            {saveMsg && <span className="text-xs text-income">{saveMsg}</span>}
+            <Button onClick={handleSave} disabled={isSaving} size="sm">
+              <Save className="w-4 h-4" />
               {isSaving ? '저장중' : '저장'}
             </Button>
-            {saveMsg && <span className="text-xs text-gray-600">{saveMsg}</span>}
           </div>
         </div>
+      </header>
 
+      <div className="container mx-auto px-4 py-6 md:px-6 md:py-8">
         <CloudSyncPanel />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4 h-auto bg-white/80 backdrop-blur shadow-md rounded-xl p-1">
-            {[
-              { value: 'budget', icon: <Wallet className="w-5 h-5" />,     label: '지출관리', active: 'bg-amber-50 border-amber-100' },
-              { value: 'stocks', icon: <TrendingUp className="w-5 h-5" />, label: '주식',     active: 'bg-rose-50 border-rose-100' },
-            ].map(({ value, icon, label, active }) => (
-              <TabsTrigger
-                key={value}
-                value={value}
-                className={`flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 data-[state=active]:${active} data-[state=active]:text-slate-900 data-[state=active]:shadow-sm data-[state=active]:border`}
-              >
-                {icon}
-                <span className="text-xs md:text-sm">{label}</span>
-              </TabsTrigger>
-            ))}
+          <TabsList className="mb-6 w-full">
+            <TabsTrigger value="budget">
+              <Wallet className="w-4 h-4" />
+              지출관리
+            </TabsTrigger>
+            <TabsTrigger value="stocks">
+              <TrendingUp className="w-4 h-4" />
+              주식
+            </TabsTrigger>
           </TabsList>
 
-          {/* 월 선택 */}
+          {/* 월 선택 — 세그먼트 컨트롤 */}
           {activeTab === 'budget' && (
-            <div className="mb-4 p-4 bg-white/80 backdrop-blur rounded-xl shadow-sm border">
-              <div className="flex items-center gap-2 overflow-x-auto">
-                {MONTHS.map(({ value, label }) => (
-                  <Button
-                    key={value}
-                    onClick={() => setSelectedMonth(value)}
-                    variant={selectedMonth === value ? 'default' : 'outline'}
-                    className={`min-w-[60px] ${selectedMonth === value ? 'shadow-sm' : ''}`}
-                    size="sm"
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </div>
+            <div className="mb-6 inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1">
+              {MONTHS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => setSelectedMonth(value)}
+                  className={`tnum min-w-[52px] rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    selectedMonth === value
+                      ? 'bg-primary font-medium text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           )}
 

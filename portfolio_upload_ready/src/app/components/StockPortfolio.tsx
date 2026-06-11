@@ -1089,25 +1089,25 @@ export function StockPortfolio() {
   // ✅ 저채도 웜톤 파스텔(눈 편한) 차트 컬러
   // 파란 계열은 UI 전체 톤에서 제외(단, 손익(-) 표시는 별도 규칙으로 파스텔 블루 유지)
   const COLORS = [
-    '#e9c7c1', // muted rose
-    '#edd8b6', // muted amber
-    '#e6d3e9', // muted lilac
-    '#d9e4dd', // muted sage
-    '#eadfd6', // muted sand
-    '#e7d0c8',
-    '#efe3d6',
-    '#d8e0da',
-    '#e2d7e6',
-    '#e9e0d8',
-    '#dfd9d6',
-    '#f1ebe7',
+    '#a23b2e', // brick
+    '#176b4d', // deep green
+    '#1c1c1a', // ink
+    '#8a8478', // warm gray
+    '#b3552e', // rust
+    '#3f7a68', // sea green
+    '#c9b89a', // sand
+    '#54524e', // graphite
+    '#9b978f', // stone
+    '#d8d5cf', // light stone
+    '#e0d4c3', // pale sand
+    '#6e6b66', // slate
   ];
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <TrendingUp className="w-8 h-8 text-rose-300" />
-          <h1 className="text-2xl">주식 포트폴리오</h1>
+        <div className="leading-tight">
+          <div className="eyebrow">Stock Portfolio</div>
+          <h1>주식 포트폴리오</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -1135,25 +1135,25 @@ export function StockPortfolio() {
 
       {/* 데이터 로드 에러(파싱 실패) 안내 */}
       {!loadOk && (
-        <Card className="p-4 rounded-xl border border-rose-100 bg-rose-50">
-          <div className="text-sm font-semibold text-rose-900">데이터 복구 안내</div>
-          <div className="mt-1 text-sm text-rose-800/90 leading-relaxed">
+        <Card className="p-4 rounded-xl border-expense/25 bg-expense/5">
+          <div className="text-sm font-semibold text-expense">데이터 복구 안내</div>
+          <div className="mt-1 text-sm text-foreground/80 leading-relaxed">
             브라우저에 저장된 주식 데이터가 깨져서(파싱 실패) 일단 빈 화면으로 열렸어요.
             <br />
             <span className="font-semibold">아래 버튼으로 복구</span>를 먼저 해보고, 그래도 안 되면 예전 도메인에서 데이터를 가져와야 할 수 있어요.
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button onClick={recoverFromLastGood} className="bg-rose-600 hover:bg-rose-700 text-white">마지막 정상 데이터로 복구</Button>
+            <Button onClick={recoverFromLastGood} className="bg-expense text-white hover:bg-expense/90">마지막 정상 데이터로 복구</Button>
             <Button variant="outline" onClick={enableSavingAnyway}>저장 다시 켜기(초기화 포함)</Button>
           </div>
         </Card>
       )}
 
       {/* 환율 입력 */}
-      <Card className="p-4 bg-white shadow-md rounded-xl border">
+      <Card className="p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-slate-600" />
+            <DollarSign className="w-5 h-5 text-muted-foreground" />
             <span className="font-semibold">원/달러 환율</span>
           </div>
           <div className="flex items-center gap-2">
@@ -1163,27 +1163,27 @@ export function StockPortfolio() {
               onChange={(e) => updateExchangeRate(Number(e.target.value))}
               className="w-28"
             />
-            <span className="text-sm text-gray-500">원/$</span>
+            <span className="text-sm text-muted-foreground">원/$</span>
           </div>
         </div>
         {(!data.exchangeRate || data.exchangeRate <= 0) && (
-          <div className="mt-2 text-sm text-amber-700">
+          <div className="mt-2 text-sm text-expense">
             * 환율이 0이면, 달러(USD) 종목의 원화 계산/비중 그래프가 이상하게 나올 수 있어요.
           </div>
         )}
       </Card>
 
       {/* ✅ 공통(티커별) 현재가 입력 */}
-      <Card className="p-4 bg-white shadow-md rounded-xl border">
+      <Card className="p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <Settings className="w-5 h-5 text-slate-500" />
+            <Settings className="w-5 h-5 text-muted-foreground" />
             <span className="font-semibold">공통 현재가 (티커별)</span>
           </div>
         </div>
 
         {holdingsByTickerKey.length === 0 ? (
-          <div className="mt-3 text-sm text-gray-400">보유 종목이 없습니다</div>
+          <div className="mt-3 text-sm text-muted-foreground/70">보유 종목이 없습니다</div>
         ) : (
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {holdingsByTickerKey.map((g) => {
@@ -1191,21 +1191,21 @@ export function StockPortfolio() {
               return (
                 <div
                   key={g.key}
-                  className="flex items-center justify-between gap-3 rounded-xl border bg-gray-50 px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded-xl border bg-secondary/60 px-3 py-2"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <div className="font-bold truncate">{g.ticker}</div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border text-gray-600">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border text-muted-foreground">
                         {g.currency}
                       </span>
                       {has && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 border border-amber-100 text-amber-700">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary border border-border text-expense">
                           적용
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-gray-500 truncate">
+                    <div className="text-[11px] text-muted-foreground truncate">
                       보유 {fmt0(g.totalQty)}주 · 평단 {fmtMoney(g.avgPrice, g.currency)}
                     </div>
                   </div>
@@ -1225,21 +1225,21 @@ export function StockPortfolio() {
           </div>
         )}
 
-        <div className="mt-2 text-xs text-gray-500">
+        <div className="mt-2 text-xs text-muted-foreground">
           * 공통 현재가를 비우면(삭제) 기존 종목별 현재가 입력값이 다시 사용돼요.
         </div>
       </Card>
 
       {/* 자산 현황 요약 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-6 bg-white border shadow-md rounded-2xl">
+        <Card className="p-5">
           <div className="flex justify-between items-start">
             <div>
-              <div className="text-sm text-gray-600">총 주식 평가금액(원화)</div>
+              <div className="text-sm text-muted-foreground">총 주식 평가금액(원화)</div>
               <div className="text-3xl font-bold mt-1">₩ {fmt0(totalAssetsKRW)}</div>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
-              <Wallet className="w-5 h-5 text-amber-500" />
+            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+              <Wallet className="w-5 h-5 text-foreground" />
             </div>
           </div>
         </Card>
@@ -1250,19 +1250,19 @@ export function StockPortfolio() {
           const accountPnLKRW = accountTotalKRW - accountNetCashFlowKRW;
           const accountPnLPct = accountNetCashFlowKRW !== 0 ? (accountPnLKRW / accountNetCashFlowKRW) * 100 : 0;
           return (
-            <Card key={account.id} className="p-6 bg-white border shadow-md rounded-2xl">
+            <Card key={account.id} className="p-5">
               <div className="flex justify-between items-start">
                 <div>
-                  <div className="text-sm text-gray-600">{account.name}</div>
+                  <div className="text-sm text-muted-foreground">{account.name}</div>
                   <div className="text-3xl font-bold mt-1">₩ {fmt0(accountTotalKRW)}</div>
-                  <div className="mt-2 text-xs text-gray-500">순입금액: ₩ {fmt0(accountNetCashFlowKRW)}</div>
-                  <div className="mt-1 text-xs text-gray-500">보유 현금: ₩ {fmt0(account.cashHoldings)}</div>
-                  <div className={`mt-1 text-sm font-semibold ${accountPnLKRW >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}`}>
+                  <div className="mt-2 text-xs text-muted-foreground">순입금액: ₩ {fmt0(accountNetCashFlowKRW)}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">보유 현금: ₩ {fmt0(account.cashHoldings)}</div>
+                  <div className={`mt-1 text-sm font-semibold ${accountPnLKRW >= 0 ? 'text-gain' : 'text-loss'}`}>
                     {accountPnLKRW >= 0 ? '수익' : '손실'} ₩ {fmt0(accountPnLKRW)} ({fmtPct(accountPnLPct)})
                   </div>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-                  <CreditCard className="w-5 h-5 text-violet-400" />
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+                  <CreditCard className="w-5 h-5 text-foreground" />
                 </div>
               </div>
             </Card>
@@ -1270,19 +1270,55 @@ export function StockPortfolio() {
         })}
       </div>
 
+      {/* ✅ 종목별 수익률 — 전체 계좌 티커 합산, 매수원가 대비 */}
+      {(() => {
+        const perfRows = duplicateTickerSummary
+          .filter((g) => g.buyCostKRW > 0 && g.ticker && g.ticker !== '티커명')
+          .sort((a, b) => a.profitLossPct - b.profitLossPct);
+        if (perfRows.length === 0) return null;
+        const maxAbsPct = Math.max(...perfRows.map((r) => Math.abs(r.profitLossPct)), 0.0001);
+        return (
+          <Card className="overflow-hidden">
+            <div className="border-b border-border px-5 py-3.5">
+              <div className="eyebrow">Performance</div>
+              <h2>종목별 수익률 (%) — 매수원가 대비</h2>
+            </div>
+            <div className="space-y-1 px-5 py-4">
+              {perfRows.map((g) => {
+                const positive = g.profitLossPct >= 0;
+                return (
+                  <div key={g.ticker} className="flex items-center gap-3">
+                    <span className="tnum w-16 shrink-0 truncate text-xs font-semibold">{g.ticker}</span>
+                    <div className="h-4 flex-1 overflow-hidden rounded-sm bg-secondary">
+                      <div
+                        className={`h-full rounded-sm ${positive ? 'bg-gain' : 'bg-loss'}`}
+                        style={{ width: `${Math.max((Math.abs(g.profitLossPct) / maxAbsPct) * 100, 1.5)}%` }}
+                      />
+                    </div>
+                    <span className={`tnum w-24 shrink-0 text-right text-xs font-semibold ${positive ? 'text-gain' : 'text-loss'}`}>
+                      {positive ? '+' : ''}{fmtPct(g.profitLossPct)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        );
+      })()}
+
       {/* 계좌 섹션 */}
       <div className="space-y-6">
         {data.accounts.map((account) => (
-          <Card key={account.id} className="p-6 bg-white shadow-md rounded-2xl border">
+          <Card key={account.id} className="p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm text-gray-600">계좌</span>
+                <span className="text-sm text-muted-foreground">계좌</span>
                 <Input
                   value={account.name}
                   onChange={(e) => updateAccountName(account.id, e.target.value)}
                   className="w-[200px]"
                 />
-                <span className="text-sm text-gray-600">현금 보유량</span>
+                <span className="text-sm text-muted-foreground">현금 보유량</span>
                 <Input
                   type="number"
                   value={numInputValue(account.cashHoldings)}
@@ -1295,7 +1331,7 @@ export function StockPortfolio() {
                     variant="outline"
                     size="sm"
                     onClick={() => deleteAccount(account.id)}
-                    className="text-rose-600"
+                    className="text-expense"
                   >
                     <Trash2 className="w-4 h-4 mr-1" />
                     계좌 삭제
@@ -1310,24 +1346,24 @@ export function StockPortfolio() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-              <div className="rounded-xl border bg-gray-50 p-3">
-                <div className="text-xs text-gray-500">순입금액</div>
+              <div className="rounded-xl border bg-secondary/60 p-3">
+                <div className="text-xs text-muted-foreground">순입금액</div>
                 <div className="text-lg font-semibold">₩ {fmt0(getAccountNetCashFlowKRW(account))}</div>
               </div>
-              <div className="rounded-xl border bg-gray-50 p-3">
-                <div className="text-xs text-gray-500">현재 평가금액</div>
+              <div className="rounded-xl border bg-secondary/60 p-3">
+                <div className="text-xs text-muted-foreground">현재 평가금액</div>
                 <div className="text-lg font-semibold">₩ {fmt0(getAccountTotalKRW(account))}</div>
-                <div className="text-xs text-gray-500 mt-1">주식 ₩ {fmt0(getAccountStockTotalKRW(account))} + 현금 ₩ {fmt0(account.cashHoldings)}</div>
+                <div className="text-xs text-muted-foreground mt-1">주식 ₩ {fmt0(getAccountStockTotalKRW(account))} + 현금 ₩ {fmt0(account.cashHoldings)}</div>
               </div>
-              <div className="rounded-xl border bg-gray-50 p-3">
+              <div className="rounded-xl border bg-secondary/60 p-3">
                 {(() => {
                   const pnl = getAccountTotalKRW(account) - getAccountNetCashFlowKRW(account);
                   const base = getAccountNetCashFlowKRW(account);
                   const pct = base !== 0 ? (pnl / base) * 100 : 0;
                   return (
                     <>
-                      <div className="text-xs text-gray-500">계좌 수익 / 손실</div>
-                      <div className={`text-lg font-semibold ${pnl >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}`}>
+                      <div className="text-xs text-muted-foreground">계좌 수익 / 손실</div>
+                      <div className={`text-lg font-semibold ${pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
                         ₩ {fmt0(pnl)} ({fmtPct(pct)})
                       </div>
                     </>
@@ -1340,7 +1376,7 @@ export function StockPortfolio() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1100px]">
                 <thead>
-                  <tr className="border-b-2 border-gray-200 text-sm text-gray-600">
+                  <tr className="border-b-2 border-border text-sm text-muted-foreground">
                     <th className="p-2 w-10"></th>
                     <th className="p-2 text-left">티커</th>
                     <th className="p-2 text-center">수량</th>
@@ -1364,11 +1400,11 @@ export function StockPortfolio() {
                     const shownCurrent = hasGlobal ? (tickerPrices[tk] as number) : stock.currentPrice;
 
                     return (
-                      <tr key={stock.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <tr key={stock.id} className="border-b border-border hover:bg-secondary/60">
                         <td className="p-2 text-center">
                           <button
                             onClick={() => toggleExpand(account.id, stock.id)}
-                            className="p-1 hover:bg-gray-200 rounded"
+                            className="p-1 hover:bg-border rounded"
                             aria-label="expand"
                           >
                             {stock.isExpanded ? (
@@ -1442,7 +1478,7 @@ export function StockPortfolio() {
                         </td>
 
                         <td className="p-2 text-center font-medium">
-                          <span className={metrics.targetProfitLossPercent >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}>
+                          <span className={metrics.targetProfitLossPercent >= 0 ? 'text-gain' : 'text-loss'}>
                             {fmtPct(metrics.targetProfitLossPercent)}
                           </span>
                         </td>
@@ -1456,15 +1492,15 @@ export function StockPortfolio() {
                         </td>
 
                         <td className="p-2 text-right">
-                          <div className={metrics.profitLoss >= 0 ? 'text-rose-400/80 font-semibold' : 'text-sky-500/80 font-semibold'}>
+                          <div className={metrics.profitLoss >= 0 ? 'text-gain font-semibold' : 'text-loss font-semibold'}>
                             {isUSD ? '$ ' + fmt2(metrics.profitLoss) : '₩ ' + fmt0(metrics.profitLoss)}
                           </div>
                           {isUSD && (
-                            <div className="text-xs text-gray-500">₩ {fmt0(metrics.profitLossKRW)}</div>
+                            <div className="text-xs text-muted-foreground">₩ {fmt0(metrics.profitLossKRW)}</div>
                           )}
                         </td>
 
-                        <td className={`p-2 text-right font-bold ${metrics.profitLossPercent >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}`}>
+                        <td className={`p-2 text-right font-bold ${metrics.profitLossPercent >= 0 ? 'text-gain' : 'text-loss'}`}>
                           {fmtPct(metrics.profitLossPercent)}
                         </td>
 
@@ -1473,7 +1509,7 @@ export function StockPortfolio() {
                             variant="ghost"
                             size="sm"
                             onClick={() => deleteStock(account.id, stock.id)}
-                            className="text-rose-500 hover:text-rose-600"
+                            className="text-expense/70 hover:text-expense"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -1501,7 +1537,7 @@ export function StockPortfolio() {
                   );
 
                   return (
-                    <div key={stock.id} className="p-4 rounded-xl border bg-gray-50">
+                    <div key={stock.id} className="p-4 rounded-xl border bg-secondary/60">
                       {/* 매수 기록 */}
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-lg font-semibold">매수기록</h3>
@@ -1522,7 +1558,7 @@ export function StockPortfolio() {
                       <div className="overflow-x-auto">
                         <table className="w-full min-w-[720px]">
                           <thead>
-                            <tr className="border-b border-gray-200 text-sm text-gray-600">
+                            <tr className="border-b border-border text-sm text-muted-foreground">
                               <th className="p-2 text-left">매수 일자</th>
                               <th className="p-2 text-center">수량</th>
                               <th className="p-2 text-center">단가 ({currencySymbol})</th>
@@ -1534,7 +1570,7 @@ export function StockPortfolio() {
                             {buyRecords.map((record) => {
                               const total = (Number(record.quantity) || 0) * (Number(record.price) || 0);
                               return (
-                                <tr key={record.id} className="border-b border-gray-100">
+                                <tr key={record.id} className="border-b border-border">
                                   <td className="p-2">
                                     <Input
                                       type="date"
@@ -1577,7 +1613,7 @@ export function StockPortfolio() {
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => deleteBuyRecord(account.id, stock.id, record.id)}
-                                      className="text-rose-500 hover:text-rose-600"
+                                      className="text-expense/70 hover:text-expense"
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </Button>
@@ -1615,7 +1651,7 @@ export function StockPortfolio() {
                       <div className="overflow-x-auto">
                         <table className="w-full min-w-[720px]">
                           <thead>
-                            <tr className="border-b border-gray-200 text-sm text-gray-600">
+                            <tr className="border-b border-border text-sm text-muted-foreground">
                               <th className="p-2 text-left">매도 일자</th>
                               <th className="p-2 text-center">수량</th>
                               <th className="p-2 text-center">단가 ({currencySymbol})</th>
@@ -1627,7 +1663,7 @@ export function StockPortfolio() {
                             {sellRecords.map((record) => {
                               const total = (Number(record.quantity) || 0) * (Number(record.price) || 0);
                               return (
-                                <tr key={record.id} className="border-b border-gray-100">
+                                <tr key={record.id} className="border-b border-border">
                                   <td className="p-2">
                                     <Input
                                       type="date"
@@ -1670,7 +1706,7 @@ export function StockPortfolio() {
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => deleteSellRecord(account.id, stock.id, record.id)}
-                                      className="text-rose-500 hover:text-rose-600"
+                                      className="text-expense/70 hover:text-expense"
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </Button>
@@ -1698,10 +1734,10 @@ export function StockPortfolio() {
       </div>
 
       {/* 월별 매도 현황 */}
-      <Card className="p-6 bg-white shadow-md rounded-2xl border">
+      <Card className="p-5">
         <div className="flex items-end justify-between gap-3 mb-4 flex-wrap">
           <h2 className="text-2xl">월별 매도 현황</h2>
-          <div className="text-xs text-gray-500">단위: 원</div>
+          <div className="text-xs text-muted-foreground">단위: 원</div>
         </div>
 
         {/* ✅ 부피 줄인 컴팩트 입력 (복제 기능 제거) */}
@@ -1709,15 +1745,15 @@ export function StockPortfolio() {
           {monthlyRealizedPnLKRW.map((item) => (
             <div
               key={item.month}
-              className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-gray-50 border"
+              className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-secondary/60 border"
             >
-              <div className="text-sm font-semibold text-gray-700">{item.month}월</div>
+              <div className="text-sm font-semibold text-foreground/80">{item.month}월</div>
               <Input
                 readOnly
                 value={fmt0(item.pnlKRW)}
                 className={
                   "w-28 h-9 text-sm text-right bg-white " +
-                  (item.pnlKRW >= 0 ? 'text-rose-400/80 font-semibold' : 'text-sky-500/80 font-semibold')
+                  (item.pnlKRW >= 0 ? 'text-gain font-semibold' : 'text-loss font-semibold')
                 }
               />
             </div>
@@ -1726,18 +1762,18 @@ export function StockPortfolio() {
       </Card>
 
       {/* 비중 그래프 (가장 하단) */}
-      <Card className="p-6 bg-white shadow-md rounded-2xl border">
+      <Card className="p-5">
         <h2 className="text-2xl mb-4">비중 그래프 (구매비용 기준)</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {data.accounts.map((account, idx) => {
             const weights = getAccountWeights(account);
             return (
-              <div key={account.id} className="p-4 rounded-2xl border bg-gray-50">
+              <div key={account.id} className="p-4 rounded-2xl border bg-secondary/60">
                 <div className="flex items-center justify-between mb-2">
                   <div className="font-semibold">
                     {idx + 1}번 계좌 비중
-                    <span className="ml-2 text-xs text-gray-500">({account.name})</span>
+                    <span className="ml-2 text-xs text-muted-foreground">({account.name})</span>
                   </div>
                 </div>
 
@@ -1775,32 +1811,32 @@ export function StockPortfolio() {
               {duplicateTickerSummary.map((g) => {
                 const weight = totalPortfolioBuyCostKRW > 0 ? (g.buyCostKRW / totalPortfolioBuyCostKRW) * 100 : 0;
                 return (
-                  <div key={g.ticker} className="p-4 rounded-2xl border bg-gray-50">
+                  <div key={g.ticker} className="p-4 rounded-2xl border bg-secondary/60">
                     <div className="flex items-center justify-between">
                       <div className="text-lg font-bold">{g.ticker}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-muted-foreground">
                         {g.count > 1 ? `${g.count}개 포지션 · ` : ''}비중 {fmt2(weight)}%
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
                       <div className="p-2 rounded-lg bg-white border">
-                        <div className="text-xs text-gray-500">매입원금(원)</div>
+                        <div className="text-xs text-muted-foreground">매입원금(원)</div>
                         <div className="font-semibold">{fmt0(g.buyCostKRW)}</div>
                       </div>
                       <div className="p-2 rounded-lg bg-white border">
-                        <div className="text-xs text-gray-500">평가금액(원)</div>
+                        <div className="text-xs text-muted-foreground">평가금액(원)</div>
                         <div className="font-semibold">{fmt0(g.currentValueKRW)}</div>
                       </div>
                       <div className="p-2 rounded-lg bg-white border">
-                        <div className="text-xs text-gray-500">손익(원)</div>
-                        <div className={"font-bold " + (g.profitLossKRW >= 0 ? 'text-rose-400/80' : 'text-sky-500/80')}
+                        <div className="text-xs text-muted-foreground">손익(원)</div>
+                        <div className={"font-bold " + (g.profitLossKRW >= 0 ? 'text-gain' : 'text-loss')}
                         >
                           {fmt0(g.profitLossKRW)}
                         </div>
                       </div>
                       <div className="p-2 rounded-lg bg-white border">
-                        <div className="text-xs text-gray-500">손익률</div>
-                        <div className={"font-bold " + (g.profitLossPct >= 0 ? 'text-rose-400/80' : 'text-sky-500/80')}
+                        <div className="text-xs text-muted-foreground">손익률</div>
+                        <div className={"font-bold " + (g.profitLossPct >= 0 ? 'text-gain' : 'text-loss')}
                         >
                           {fmtPct(g.profitLossPct)}
                         </div>
@@ -1818,12 +1854,12 @@ export function StockPortfolio() {
           <h3 className="text-lg font-semibold mb-3">물타기 프로그램 (평단 낮추기 계산기)</h3>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl border bg-gray-50">
-              <div className="text-sm text-gray-600">입력</div>
+            <div className="p-4 rounded-2xl border bg-secondary/60">
+              <div className="text-sm text-muted-foreground">입력</div>
 
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <div className="text-xs text-gray-500 mb-1">티커(선택)</div>
+                  <div className="text-xs text-muted-foreground mb-1">티커(선택)</div>
                   <select
                     value={avgDownKey}
                     onChange={(e) => {
@@ -1848,7 +1884,7 @@ export function StockPortfolio() {
                 </div>
 
                 <div>
-                  <div className="text-xs text-gray-500 mb-1">현재가</div>
+                  <div className="text-xs text-muted-foreground mb-1">현재가</div>
                   <Input
                     type="number"
                     value={numInputValue(avgDownCur)}
@@ -1859,7 +1895,7 @@ export function StockPortfolio() {
                 </div>
 
                 <div>
-                  <div className="text-xs text-gray-500 mb-1">현재 평단가</div>
+                  <div className="text-xs text-muted-foreground mb-1">현재 평단가</div>
                   <Input
                     type="number"
                     value={numInputValue(avgDownAvg)}
@@ -1870,7 +1906,7 @@ export function StockPortfolio() {
                 </div>
 
                 <div>
-                  <div className="text-xs text-gray-500 mb-1">현재 수량</div>
+                  <div className="text-xs text-muted-foreground mb-1">현재 수량</div>
                   <Input
                     type="number"
                     value={numInputValue(avgDownQty)}
@@ -1881,7 +1917,7 @@ export function StockPortfolio() {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <div className="text-xs text-gray-500 mb-1">물탈 주식 수(추가 매수 수량)</div>
+                  <div className="text-xs text-muted-foreground mb-1">물탈 주식 수(추가 매수 수량)</div>
                   <Input
                     type="number"
                     value={numInputValue(avgDownAddQty)}
@@ -1892,13 +1928,13 @@ export function StockPortfolio() {
                 </div>
               </div>
 
-              <div className="mt-3 text-xs text-gray-500">
+              <div className="mt-3 text-xs text-muted-foreground">
                 계산식: (평단×수량 + 현재가×추가수량) ÷ (수량+추가수량)
               </div>
             </div>
 
             <div className="p-4 rounded-2xl border bg-white">
-              <div className="text-sm text-gray-600">결과</div>
+              <div className="text-sm text-muted-foreground">결과</div>
 
               {(() => {
                 const baseQty = Number(avgDownQty) || 0;
@@ -1910,25 +1946,25 @@ export function StockPortfolio() {
                 const drop = round2(baseAvg - newAvg);
                 const dropPct = baseAvg > 0 ? round2((drop / baseAvg) * 100) : 0;
 
-                const dropTone = drop >= 0 ? 'text-emerald-700' : 'text-rose-400/80';
+                const dropTone = drop >= 0 ? 'text-gain' : 'text-gain';
 
                 return (
                   <div className="mt-3 grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded-xl border bg-gray-50">
-                      <div className="text-xs text-gray-500">새 평단가</div>
+                    <div className="p-3 rounded-xl border bg-secondary/60">
+                      <div className="text-xs text-muted-foreground">새 평단가</div>
                       <div className="text-lg font-bold mt-1">{fmt2(newAvg)}</div>
                     </div>
-                    <div className="p-3 rounded-xl border bg-gray-50">
-                      <div className="text-xs text-gray-500">평단 변화</div>
+                    <div className="p-3 rounded-xl border bg-secondary/60">
+                      <div className="text-xs text-muted-foreground">평단 변화</div>
                       <div className={`text-lg font-bold mt-1 ${dropTone}`}>{fmt2(drop)}</div>
-                      <div className="text-xs text-gray-500 mt-1">({fmt2(dropPct)}%)</div>
+                      <div className="text-xs text-muted-foreground mt-1">({fmt2(dropPct)}%)</div>
                     </div>
-                    <div className="p-3 rounded-xl border bg-gray-50">
-                      <div className="text-xs text-gray-500">총 수량</div>
+                    <div className="p-3 rounded-xl border bg-secondary/60">
+                      <div className="text-xs text-muted-foreground">총 수량</div>
                       <div className="text-lg font-bold mt-1">{fmt2(newQty)}</div>
                     </div>
-                    <div className="p-3 rounded-xl border bg-gray-50">
-                      <div className="text-xs text-gray-500">추가 매수금</div>
+                    <div className="p-3 rounded-xl border bg-secondary/60">
+                      <div className="text-xs text-muted-foreground">추가 매수금</div>
                       <div className="text-lg font-bold mt-1">{fmt2(cur * addQty)}</div>
                     </div>
                   </div>
@@ -1949,17 +1985,17 @@ export function StockPortfolio() {
               const pct = netCashFlow !== 0 ? (pnl / netCashFlow) * 100 : 0;
 
               return (
-                <div key={account.id} className="rounded-2xl border bg-gray-50 p-4">
+                <div key={account.id} className="rounded-2xl border bg-secondary/60 p-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-3">
                     <div>
                       <div className="font-semibold">{account.name}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-muted-foreground">
                         순입금액 ₩ {fmt0(netCashFlow)} · 현재 평가금액 ₩ {fmt0(valuation)}
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-muted-foreground">
                         주식 ₩ {fmt0(stockValuation)} · 현금 ₩ {fmt0(account.cashHoldings)}
                       </div>
-                      <div className={`text-sm font-semibold mt-1 ${pnl >= 0 ? 'text-rose-400/80' : 'text-sky-500/80'}`}>
+                      <div className={`text-sm font-semibold mt-1 ${pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
                         {pnl >= 0 ? '수익' : '손실'} ₩ {fmt0(pnl)} ({fmtPct(pct)})
                       </div>
                     </div>
@@ -1970,12 +2006,12 @@ export function StockPortfolio() {
                   </div>
 
                   {(account.cashFlows || []).length === 0 ? (
-                    <div className="text-sm text-gray-400 py-4 text-center">입금 / 출금 내역이 없습니다</div>
+                    <div className="text-sm text-muted-foreground/70 py-4 text-center">입금 / 출금 내역이 없습니다</div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[720px]">
                         <thead>
-                          <tr className="border-b text-sm text-gray-600">
+                          <tr className="border-b text-sm text-muted-foreground">
                             <th className="p-2 text-left">날짜</th>
                             <th className="p-2 text-left">구분</th>
                             <th className="p-2 text-right">금액</th>
@@ -1985,7 +2021,7 @@ export function StockPortfolio() {
                         </thead>
                         <tbody>
                           {(account.cashFlows || []).map((entry) => (
-                            <tr key={entry.id} className="border-b border-gray-100">
+                            <tr key={entry.id} className="border-b border-border">
                               <td className="p-2">
                                 <Input
                                   type="date"
@@ -2023,7 +2059,7 @@ export function StockPortfolio() {
                               </td>
                               <td className="p-2 text-center">
                                 <Button size="sm" variant="ghost" onClick={() => deleteCashFlow(account.id, entry.id)}>
-                                  <Trash2 className="w-4 h-4 text-rose-500" />
+                                  <Trash2 className="w-4 h-4 text-expense/70" />
                                 </Button>
                               </td>
                             </tr>
