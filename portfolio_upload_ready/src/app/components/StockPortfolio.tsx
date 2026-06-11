@@ -1006,17 +1006,6 @@ export function StockPortfolio() {
     return items;
   }, [data.accounts, data.exchangeRate, tickerPrices]);
 
-  const totalPortfolioBuyCostKRW = useMemo(() => {
-    const rate = Number(data.exchangeRate) || 0;
-    let total = 0;
-    for (const account of data.accounts) {
-      for (const stock of account.stocks) {
-        const buyCost = (Number(stock.avgPrice) || 0) * (Number(stock.quantity) || 0);
-        total += stock.currency === 'USD' ? buyCost * rate : buyCost;
-      }
-    }
-    return total;
-  }, [data.sellLedger, data.exchangeRate]);
 
   const portfolioTickerKeys = useMemo(() => {
     const s = new Set<string>();
@@ -1067,6 +1056,17 @@ export function StockPortfolio() {
   }, [data.accounts, tickerPrices]);
 
   // 물타기 계산기
+  // ✅ 계좌별 입출금 현황 접기/펴기 (기본: 접힘)
+  const [openCashFlows, setOpenCashFlows] = useState<Set<string>>(new Set());
+  const toggleCashFlowOpen = (accountId: string) => {
+    setOpenCashFlows((prev) => {
+      const next = new Set(prev);
+      if (next.has(accountId)) next.delete(accountId);
+      else next.add(accountId);
+      return next;
+    });
+  };
+
   const [avgDownKey, setAvgDownKey] = useState<string>('');
   const [avgDownAvg, setAvgDownAvg] = useState<number>(0);
   const [avgDownQty, setAvgDownQty] = useState<number>(0);
@@ -1162,9 +1162,29 @@ export function StockPortfolio() {
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="leading-tight">
-          <div className="eyebrow">Stock Portfolio</div>
-          <h1>주식 포트폴리오</h1>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="leading-tight">
+            <div className="eyebrow">Stock Portfolio</div>
+            <h1>주식 포트폴리오</h1>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5">
+            <span className="whitespace-nowrap text-xs text-muted-foreground">원/달러 환율</span>
+            <Input
+              type="number"
+              value={numInputValue(data.exchangeRate)}
+              onChange={(e) => updateExchangeRate(Number(e.target.value))}
+              className="h-7 w-24 border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
+            />
+            <span className="text-xs text-muted-foreground">원/$</span>
+            {(!data.exchangeRate || data.exchangeRate <= 0) && (
+              <span
+                className="text-xs text-expense"
+                title="환율이 0이면 USD 종목의 원화 계산이 이상하게 나올 수 있어요"
+              >
+                ⚠
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -1206,33 +1226,8 @@ export function StockPortfolio() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
-      {/* 환율 입력 */}
-      <Card className="p-4 lg:col-span-1">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-muted-foreground" />
-            <span className="font-semibold">원/달러 환율</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              value={numInputValue(data.exchangeRate)}
-              onChange={(e) => updateExchangeRate(Number(e.target.value))}
-              className="w-28"
-            />
-            <span className="text-sm text-muted-foreground">원/$</span>
-          </div>
-        </div>
-        {(!data.exchangeRate || data.exchangeRate <= 0) && (
-          <div className="mt-2 text-sm text-expense">
-            * 환율이 0이면, 달러(USD) 종목의 원화 계산/비중 그래프가 이상하게 나올 수 있어요.
-          </div>
-        )}
-      </Card>
-
       {/* ✅ 공통(티커별) 현재가 입력 */}
-      <Card className="p-4 lg:col-span-2">
+      <Card className="p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Settings className="w-5 h-5 text-muted-foreground" />
@@ -1287,7 +1282,6 @@ export function StockPortfolio() {
           * 공통 현재가를 비우면(삭제) 기존 종목별 현재가 입력값이 다시 사용돼요.
         </div>
       </Card>
-      </div>
 
       {/* 자산 현황 요약 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1419,8 +1413,8 @@ export function StockPortfolio() {
       })()}
       </div>
 
-      {/* 계좌 섹션 */}
-      <div className="space-y-6">
+      {/* 계좌 섹션 — 가로 2컬럼 (테이블은 가로 스크롤) */}
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
         {data.accounts.map((account) => (
           <Card key={account.id} className="p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
@@ -1486,9 +1480,12 @@ export function StockPortfolio() {
                 <div className="text-lg font-semibold">₩ {fmt0(getAccountNetCashFlowKRW(account))}</div>
               </div>
               <div className="rounded-xl border bg-secondary/60 p-3">
-                <div className="text-xs text-muted-foreground">현재 평가금액</div>
-                <div className="text-lg font-semibold">₩ {fmt0(getAccountTotalKRW(account))}</div>
-                <div className="text-xs text-muted-foreground mt-1">주식 ₩ {fmt0(getAccountStockTotalKRW(account))} + 현금 ₩ {fmt0(getEffectiveCashKRW(account))}</div>
+                <div className="text-xs text-muted-foreground">현재 평가금액 <span className="text-muted-foreground/60">= 주식 평가 + 현금</span></div>
+                <div className="tnum text-lg font-semibold">₩ {fmt0(getAccountTotalKRW(account))}</div>
+                <div className="tnum text-xs text-muted-foreground mt-1">주식 ₩ {fmt0(getAccountStockTotalKRW(account))} + 현금 ₩ {fmt0(getEffectiveCashKRW(account))}{account.autoCash ? ' (자동)' : ' (수동)'}</div>
+                {!account.autoCash && (
+                  <div className="mt-1 text-[11px] text-expense/80">* 수동 현금이 실제와 다르면 평가금액·수익이 어긋나요. '자동 ON' 권장</div>
+                )}
               </div>
               <div className="rounded-xl border bg-secondary/60 p-3">
                 {(() => {
@@ -1497,7 +1494,7 @@ export function StockPortfolio() {
                   const pct = base !== 0 ? (pnl / base) * 100 : 0;
                   return (
                     <>
-                      <div className="text-xs text-muted-foreground">계좌 수익 / 손실</div>
+                      <div className="text-xs text-muted-foreground">계좌 수익 / 손실 <span className="text-muted-foreground/60">= 평가금액 − 순입금액</span></div>
                       <div className={`text-lg font-semibold ${pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
                         ₩ {fmt0(pnl)} ({fmtPct(pct)})
                       </div>
@@ -1972,51 +1969,6 @@ export function StockPortfolio() {
 
         </div>
 
-        {/* 티커별 합산 전체 */}
-        {duplicateTickerSummary.length > 0 && (
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-3">티커별 합산 (전체)</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {duplicateTickerSummary.map((g) => {
-                const weight = totalPortfolioBuyCostKRW > 0 ? (g.buyCostKRW / totalPortfolioBuyCostKRW) * 100 : 0;
-                return (
-                  <div key={g.ticker} className="p-4 rounded-2xl border bg-secondary/60">
-                    <div className="flex items-center justify-between">
-                      <div className="text-lg font-bold">{g.ticker}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {g.count > 1 ? `${g.count}개 포지션 · ` : ''}비중 {fmt2(weight)}%
-                      </div>
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                      <div className="p-2 rounded-lg bg-white border">
-                        <div className="text-xs text-muted-foreground">매입원금(원)</div>
-                        <div className="font-semibold">{fmt0(g.buyCostKRW)}</div>
-                      </div>
-                      <div className="p-2 rounded-lg bg-white border">
-                        <div className="text-xs text-muted-foreground">평가금액(원)</div>
-                        <div className="font-semibold">{fmt0(g.currentValueKRW)}</div>
-                      </div>
-                      <div className="p-2 rounded-lg bg-white border">
-                        <div className="text-xs text-muted-foreground">손익(원)</div>
-                        <div className={"font-bold " + (g.profitLossKRW >= 0 ? 'text-gain' : 'text-loss')}
-                        >
-                          {fmt0(g.profitLossKRW)}
-                        </div>
-                      </div>
-                      <div className="p-2 rounded-lg bg-white border">
-                        <div className="text-xs text-muted-foreground">손익률</div>
-                        <div className={"font-bold " + (g.profitLossPct >= 0 ? 'text-gain' : 'text-loss')}
-                        >
-                          {fmtPct(g.profitLossPct)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {/* 물타기(평단 낮추기) 계산기 */}
         <div className="mt-8">
@@ -2168,13 +2120,28 @@ export function StockPortfolio() {
                         {pnl >= 0 ? '수익' : '손실'} ₩ {fmt0(pnl)} ({fmtPct(pct)})
                       </div>
                     </div>
-                    <Button size="sm" onClick={() => addCashFlow(account.id)}>
-                      <Plus className="w-4 h-4 mr-1" />
-                      입출금 추가
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          addCashFlow(account.id);
+                          setOpenCashFlows((prev) => new Set(prev).add(account.id));
+                        }}
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        입출금 추가
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => toggleCashFlowOpen(account.id)}>
+                        {openCashFlows.has(account.id) ? (
+                          <>접기 <ChevronUp className="w-4 h-4" /></>
+                        ) : (
+                          <>내역 {(account.cashFlows || []).length}건 <ChevronDown className="w-4 h-4" /></>
+                        )}
+                      </Button>
+                    </div>
                   </div>
 
-                  {(account.cashFlows || []).length === 0 ? (
+                  {openCashFlows.has(account.id) && ((account.cashFlows || []).length === 0 ? (
                     <div className="text-sm text-muted-foreground/70 py-4 text-center">입금 / 출금 내역이 없습니다</div>
                   ) : (
                     <div className="overflow-x-auto">
@@ -2236,7 +2203,7 @@ export function StockPortfolio() {
                         </tbody>
                       </table>
                     </div>
-                  )}
+                  ))}
                 </div>
               );
             })}
