@@ -20,6 +20,12 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Legend,
+  ReferenceLine,
 } from 'recharts';
 
 interface BuyRecord {
@@ -1200,8 +1206,9 @@ export function StockPortfolio() {
         </Card>
       )}
 
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
       {/* 환율 입력 */}
-      <Card className="p-4">
+      <Card className="p-4 lg:col-span-1">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-muted-foreground" />
@@ -1225,7 +1232,7 @@ export function StockPortfolio() {
       </Card>
 
       {/* ✅ 공통(티커별) 현재가 입력 */}
-      <Card className="p-4">
+      <Card className="p-4 lg:col-span-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Settings className="w-5 h-5 text-muted-foreground" />
@@ -1280,6 +1287,7 @@ export function StockPortfolio() {
           * 공통 현재가를 비우면(삭제) 기존 종목별 현재가 입력값이 다시 사용돼요.
         </div>
       </Card>
+      </div>
 
       {/* 자산 현황 요약 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1321,6 +1329,7 @@ export function StockPortfolio() {
         })}
       </div>
 
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
       {/* ✅ 종목별 수익률 — 전체 계좌 티커 합산, 매수원가 대비 */}
       {(() => {
         const perfRows = duplicateTickerSummary
@@ -1358,6 +1367,57 @@ export function StockPortfolio() {
           </Card>
         );
       })()}
+
+      {/* ✅ 손익 추이 — 월별 실현손익 (계좌별 + 합계) */}
+      {(() => {
+        const TREND_COLORS = ['#a23b2e', '#1e7350', '#b3552e', '#3f7a68', '#54524e'];
+        const hasAny = monthlyRealizedPnL.total.some((r) => r.pnlKRW !== 0);
+        const trendData = monthlyRealizedPnL.total.map((r, i) => {
+          const row: Record<string, number | string> = { month: `${r.month}월`, 합계: Math.round(r.pnlKRW) };
+          monthlyRealizedPnL.byAccount.forEach((acc, ai) => {
+            row[acc.name || `계좌 ${ai + 1}`] = Math.round(acc.rows[i]?.pnlKRW || 0);
+          });
+          return row;
+        });
+        return (
+          <Card className="overflow-hidden">
+            <div className="border-b border-border px-5 py-3.5">
+              <div className="eyebrow">Realized P/L Trend</div>
+              <h2>손익 추이 — 월별 실현손익</h2>
+            </div>
+            <div className="px-3 py-4">
+              {!hasAny ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">매도 기록이 입력되면 추이가 표시됩니다</div>
+              ) : (
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendData} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#80766a" />
+                      <YAxis tickFormatter={(v: number) => fmt0(v)} tick={{ fontSize: 11 }} stroke="#80766a" width={72} />
+                      <ReferenceLine y={0} stroke="#e8dfd0" />
+                      <Tooltip formatter={(v: any) => `₩ ${fmt0(Number(v))}`} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      {monthlyRealizedPnL.byAccount.map((acc, ai) => (
+                        <Line
+                          key={acc.accountId}
+                          type="monotone"
+                          dataKey={acc.name || `계좌 ${ai + 1}`}
+                          stroke={TREND_COLORS[ai % TREND_COLORS.length]}
+                          strokeWidth={1.5}
+                          strokeDasharray="4 3"
+                          dot={{ r: 2.5 }}
+                        />
+                      ))}
+                      <Line type="monotone" dataKey="합계" stroke="#2b2418" strokeWidth={2.5} dot={{ r: 3.5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          </Card>
+        );
+      })()}
+      </div>
 
       {/* 계좌 섹션 */}
       <div className="space-y-6">
