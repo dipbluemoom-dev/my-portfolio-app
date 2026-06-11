@@ -455,7 +455,7 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className="mx-auto max-w-4xl space-y-4">
+      <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div className="leading-tight">
             <div className="eyebrow">Monthly Budget — {selectedMonth}월</div>
@@ -492,10 +492,12 @@ export function MonthlyBudget({ selectedMonth }: MonthlyBudgetProps) {
           </div>
         </Card>
 
-        {renderSection('Fixed', '고정비', 'expense', totalFixedCosts, 'fixedCosts', data.fixedCosts)}
-        {renderSection('Living', '생활비 (카드)', 'expense', totalLivingExpenses, 'livingExpenses', data.livingExpenses)}
-        {renderSection('Account', '계좌 지출비', 'expense', totalAccountExpenses, 'accountExpenses', data.accountExpenses)}
-        {renderSection('Extra Income', '추가 소득', 'income', totalIncome, 'income', data.income)}
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+          {renderSection('Fixed', '고정비', 'expense', totalFixedCosts, 'fixedCosts', data.fixedCosts)}
+          {renderSection('Living', '생활비 (카드)', 'expense', totalLivingExpenses, 'livingExpenses', data.livingExpenses)}
+          {renderSection('Account', '계좌 지출비', 'expense', totalAccountExpenses, 'accountExpenses', data.accountExpenses)}
+          {renderSection('Extra Income', '추가 소득', 'income', totalIncome, 'income', data.income)}
+        </div>
 
         {/* 월별 요약 */}
         <Card className="overflow-hidden">

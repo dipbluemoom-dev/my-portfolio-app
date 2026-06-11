@@ -20,53 +20,53 @@
 :root {
   --font-size: 15px;
 
-  --background: #f7f7f5;
-  --foreground: #1c1c1a;
-  --card: #ffffff;
-  --card-foreground: #1c1c1a;
-  --popover: #ffffff;
-  --popover-foreground: #1c1c1a;
+  --background: #faf6ef;
+  --foreground: #262119;
+  --card: #fffdf8;
+  --card-foreground: #262119;
+  --popover: #fffdf8;
+  --popover-foreground: #262119;
 
-  --primary: #1c1c1a;            /* 버튼 = 차콜 잉크 */
+  --primary: #2b2418;            /* 버튼 = 차콜 잉크 */
   --primary-foreground: #ffffff;
-  --secondary: #f1f0ec;
-  --secondary-foreground: #1c1c1a;
-  --muted: #f1f0ec;
-  --muted-foreground: #6e6b66;
-  --accent: #f1f0ec;
-  --accent-foreground: #1c1c1a;
+  --secondary: #f3ecdf;
+  --secondary-foreground: #262119;
+  --muted: #f3ecdf;
+  --muted-foreground: #80766a;
+  --accent: #f3ecdf;
+  --accent-foreground: #262119;
 
-  --income: #176b4d;             /* 수입/플러스 */
+  --income: #1e7350;             /* 수입/플러스 */
   --expense: #a23b2e;            /* 지출/마이너스 */
   --gain: #c2403b;               /* 주식 수익 (국내 컨벤션: 빨강) */
   --loss: #2e6da4;               /* 주식 손실 (국내 컨벤션: 파랑) */
   --destructive: #a23b2e;
   --destructive-foreground: #ffffff;
 
-  --border: #e7e5e0;
-  --input: #e7e5e0;
-  --input-background: #ffffff;
+  --border: #e8dfd0;
+  --input: #e8dfd0;
+  --input-background: #fffdf8;
   --switch-background: #cbced4;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #c9c6c0;
+  --ring: #d9c8ad;
 
   --chart-1: #a23b2e;
   --chart-2: #176b4d;
   --chart-3: #1c1c1a;
-  --chart-4: #9b978f;
-  --chart-5: #d8d5cf;
+  --chart-4: #a99a85;
+  --chart-5: #e0d4c0;
 
   --radius: 0.5rem;
 
-  --sidebar: #ffffff;
-  --sidebar-foreground: #1c1c1a;
-  --sidebar-primary: #1c1c1a;
+  --sidebar: #fffdf8;
+  --sidebar-foreground: #262119;
+  --sidebar-primary: #2b2418;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f1f0ec;
+  --sidebar-accent: #f3ecdf;
   --sidebar-accent-foreground: #1c1c1a;
-  --sidebar-border: #e7e5e0;
-  --sidebar-ring: #c9c6c0;
+  --sidebar-border: #e8dfd0;
+  --sidebar-ring: #d9c8ad;
 }
 
 .dark {

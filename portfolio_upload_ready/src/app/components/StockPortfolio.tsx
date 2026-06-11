@@ -79,6 +79,8 @@ interface StockAccount {
   id: string;
   name: string;
   cashHoldings: number;
+  /** ✅ true면 현금 보유량을 자동 계산 (순입금 − 보유원가 + 실현손익) */
+  autoCash?: boolean;
   stocks: Stock[];
   cashFlows: CashFlowRecord[];
 }
@@ -122,6 +124,7 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
       id: String(a?.id ?? idx + 1),
       name: String(a?.name ?? `${idx + 1}번 계좌`),
       cashHoldings: Number(a?.cashHoldings) || 0,
+      autoCash: Boolean(a?.autoCash),
       cashFlows: Array.isArray(a?.cashFlows)
         ? a.cashFlows.map((f: any, fIdx: number) => ({
             id: String(f?.id ?? `${idx + 1}-cash-${fIdx + 1}`),
@@ -212,8 +215,8 @@ const sanitizePortfolioData = (raw: any): PortfolioData => {
       accounts.length > 0
         ? accounts
         : [
-            { id: '1', name: '1번 계좌', cashHoldings: 0, stocks: [], cashFlows: [] },
-            { id: '2', name: '2번 계좌', cashHoldings: 0, stocks: [], cashFlows: [] },
+            { id: '1', name: '1번 계좌', cashHoldings: 0, autoCash: false, stocks: [], cashFlows: [] },
+            { id: '2', name: '2번 계좌', cashHoldings: 0, autoCash: false, stocks: [], cashFlows: [] },
           ],
     exchangeRate,
     sellLedger: deduped,
@@ -249,8 +252,8 @@ export function StockPortfolio() {
     }
     return {
       accounts: [
-        { id: '1', name: '1번 계좌', cashHoldings: 0, stocks: [], cashFlows: [] },
-        { id: '2', name: '2번 계좌', cashHoldings: 0, stocks: [], cashFlows: [] },
+        { id: '1', name: '1번 계좌', cashHoldings: 0, autoCash: false, stocks: [], cashFlows: [] },
+        { id: '2', name: '2번 계좌', cashHoldings: 0, autoCash: false, stocks: [], cashFlows: [] },
       ],
       exchangeRate: 1350,
       sellLedger: [],
@@ -416,6 +419,7 @@ export function StockPortfolio() {
         id: Date.now().toString(),
         name: `${prev.accounts.length + 1}번 계좌`,
         cashHoldings: 0,
+        autoCash: false,
         stocks: [],
         cashFlows: [],
       };
@@ -830,13 +834,52 @@ export function StockPortfolio() {
     }, 0);
   };
 
-  const getAccountTotalKRW = (account: StockAccount) => getAccountStockTotalKRW(account) + (Number(account.cashHoldings) || 0);
-
   const getAccountNetCashFlowKRW = (account: StockAccount) =>
     (Array.isArray(account.cashFlows) ? account.cashFlows : []).reduce((sum, entry) => {
       const amount = Number(entry.amount) || 0;
       return sum + (entry.type === 'withdraw' ? -amount : amount);
     }, 0);
+
+  // ✅ 보유종목 매수원가 합 (원화 환산)
+  const getAccountHoldingCostKRW = (account: StockAccount) => {
+    const rate = Number(data.exchangeRate) || 0;
+    return account.stocks.reduce((sum, stock) => {
+      const cost = (Number(stock.avgPrice) || 0) * (Number(stock.quantity) || 0);
+      return sum + (stock.currency === 'USD' ? cost * rate : cost);
+    }, 0);
+  };
+
+  // ✅ 계좌별 실현손익 합 (매도 원장 기준, 원화 환산)
+  const getAccountRealizedPnLKRW = (accountId: string) => {
+    const rate = Number(data.exchangeRate) || 0;
+    const ledger = Array.isArray(data.sellLedger) ? data.sellLedger : [];
+    return ledger.reduce((sum, e) => {
+      if (String(e.accountId) !== String(accountId)) return sum;
+      const qty = Number(e.quantity) || 0;
+      const pnl = ((Number(e.sellPrice) || 0) - (Number(e.avgPriceAtSell) || 0)) * qty;
+      return sum + (e.currency === 'USD' ? pnl * rate : pnl);
+    }, 0);
+  };
+
+  // ✅ 자동 계산 현금 = 순입금액 − 보유원가 + 실현손익
+  //    (매수/매도 기록이 정확히 입력돼 있어야 맞음. USD는 현재 환율 기준 환산)
+  const getAutoCashKRW = (account: StockAccount) =>
+    getAccountNetCashFlowKRW(account) - getAccountHoldingCostKRW(account) + getAccountRealizedPnLKRW(account.id);
+
+  // ✅ 화면·합계에 사용할 실효 현금
+  const getEffectiveCashKRW = (account: StockAccount) =>
+    account.autoCash ? getAutoCashKRW(account) : (Number(account.cashHoldings) || 0);
+
+  const toggleAutoCash = (accountId: string) => {
+    setDataWithUndo('action', (prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) =>
+        account.id === accountId ? { ...account, autoCash: !account.autoCash } : account
+      ),
+    }));
+  };
+
+  const getAccountTotalKRW = (account: StockAccount) => getAccountStockTotalKRW(account) + getEffectiveCashKRW(account);
 
   const addCashFlow = (accountId: string) => {
     const today = new Date().toISOString().split('T')[0];
@@ -1027,9 +1070,11 @@ export function StockPortfolio() {
   // ✅ 월별 매도 손익(원) 자동 집계
   // - 매도기록의 (매도단가 - 매도시점 평단가) * 수량
   // - USD 종목은 환율로 원화 환산
-  const monthlyRealizedPnLKRW = useMemo(() => {
+  const monthlyRealizedPnL = useMemo(() => {
     const rate = Number(data.exchangeRate) || 0;
-    const arr = Array.from({ length: 12 }, () => 0);
+    const totalArr = Array.from({ length: 12 }, () => 0);
+    const byAccount: Record<string, number[]> = {};
+    for (const acc of data.accounts) byAccount[acc.id] = Array.from({ length: 12 }, () => 0);
 
     const ledger = Array.isArray(data.sellLedger) ? data.sellLedger : [];
     for (const e of ledger) {
@@ -1044,11 +1089,17 @@ export function StockPortfolio() {
       const avgAtSell = Number((e as any).avgPriceAtSell) || 0;
       const pnl = (sellPrice - avgAtSell) * qty;
       const pnlKRW = (e as any).currency === 'USD' ? pnl * rate : pnl;
-      arr[m - 1] += pnlKRW;
+      totalArr[m - 1] += pnlKRW;
+      const accId = String((e as any).accountId || '');
+      if (byAccount[accId]) byAccount[accId][m - 1] += pnlKRW;
     }
 
-    return arr.map((v, i) => ({ month: i + 1, pnlKRW: v }));
-  }, [data.accounts, data.exchangeRate]);
+    const toRows = (arr: number[]) => arr.map((v, i) => ({ month: i + 1, pnlKRW: v }));
+    return {
+      total: toRows(totalArr),
+      byAccount: data.accounts.map((acc) => ({ accountId: acc.id, name: acc.name, rows: toRows(byAccount[acc.id] || []) })),
+    };
+  }, [data.accounts, data.sellLedger, data.exchangeRate]);
   const updateTickerPrice = (key: string, raw: string) => {
     const v = raw.trim();
     pushUndo('edit');
@@ -1256,7 +1307,7 @@ export function StockPortfolio() {
                   <div className="text-sm text-muted-foreground">{account.name}</div>
                   <div className="text-3xl font-bold mt-1">₩ {fmt0(accountTotalKRW)}</div>
                   <div className="mt-2 text-xs text-muted-foreground">순입금액: ₩ {fmt0(accountNetCashFlowKRW)}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">보유 현금: ₩ {fmt0(account.cashHoldings)}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">보유 현금: ₩ {fmt0(getEffectiveCashKRW(account))}{account.autoCash ? ' (자동)' : ''}</div>
                   <div className={`mt-1 text-sm font-semibold ${accountPnLKRW >= 0 ? 'text-gain' : 'text-loss'}`}>
                     {accountPnLKRW >= 0 ? '수익' : '손실'} ₩ {fmt0(accountPnLKRW)} ({fmtPct(accountPnLPct)})
                   </div>
@@ -1289,10 +1340,12 @@ export function StockPortfolio() {
                 return (
                   <div key={g.ticker} className="flex items-center gap-3">
                     <span className="tnum w-16 shrink-0 truncate text-xs font-semibold">{g.ticker}</span>
-                    <div className="h-4 flex-1 overflow-hidden rounded-sm bg-secondary">
+                    <div className="relative h-4 flex-1 overflow-hidden rounded-sm bg-secondary">
+                      {/* 중앙 0% 축 */}
+                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border" />
                       <div
-                        className={`h-full rounded-sm ${positive ? 'bg-gain' : 'bg-loss'}`}
-                        style={{ width: `${Math.max((Math.abs(g.profitLossPct) / maxAbsPct) * 100, 1.5)}%` }}
+                        className={`absolute inset-y-0 ${positive ? 'left-1/2 rounded-r-sm bg-gain' : 'right-1/2 rounded-l-sm bg-loss'}`}
+                        style={{ width: `${Math.max((Math.abs(g.profitLossPct) / maxAbsPct) * 50, 0.8)}%` }}
                       />
                     </div>
                     <span className={`tnum w-24 shrink-0 text-right text-xs font-semibold ${positive ? 'text-gain' : 'text-loss'}`}>
@@ -1319,13 +1372,35 @@ export function StockPortfolio() {
                   className="w-[200px]"
                 />
                 <span className="text-sm text-muted-foreground">현금 보유량</span>
-                <Input
-                  type="number"
-                  value={numInputValue(account.cashHoldings)}
-                  onChange={(e) => updateAccountCashHoldings(account.id, Number(e.target.value))}
-                  className="w-[160px] text-right"
-                  placeholder="0"
-                />
+                {account.autoCash ? (
+                  <Input
+                    readOnly
+                    value={fmt0(getAutoCashKRW(account))}
+                    className="tnum w-[160px] text-right"
+                    title="자동 계산: 순입금액 − 보유원가 + 실현손익"
+                  />
+                ) : (
+                  <Input
+                    type="number"
+                    value={numInputValue(account.cashHoldings)}
+                    onChange={(e) => updateAccountCashHoldings(account.id, Number(e.target.value))}
+                    className="w-[160px]"
+                    placeholder="0"
+                  />
+                )}
+                <Button
+                  variant={account.autoCash ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => toggleAutoCash(account.id)}
+                  title="자동: 순입금액 − 보유종목 매수원가 + 실현손익 (USD는 현재 환율 환산)"
+                >
+                  {account.autoCash ? '자동 ON' : '자동 OFF'}
+                </Button>
+                {!account.autoCash && (
+                  <span className="tnum text-xs text-muted-foreground/70">
+                    계산값 ₩ {fmt0(getAutoCashKRW(account))}
+                  </span>
+                )}
                 {data.accounts.length > 1 && (
                   <Button
                     variant="outline"
@@ -1353,7 +1428,7 @@ export function StockPortfolio() {
               <div className="rounded-xl border bg-secondary/60 p-3">
                 <div className="text-xs text-muted-foreground">현재 평가금액</div>
                 <div className="text-lg font-semibold">₩ {fmt0(getAccountTotalKRW(account))}</div>
-                <div className="text-xs text-muted-foreground mt-1">주식 ₩ {fmt0(getAccountStockTotalKRW(account))} + 현금 ₩ {fmt0(account.cashHoldings)}</div>
+                <div className="text-xs text-muted-foreground mt-1">주식 ₩ {fmt0(getAccountStockTotalKRW(account))} + 현금 ₩ {fmt0(getEffectiveCashKRW(account))}</div>
               </div>
               <div className="rounded-xl border bg-secondary/60 p-3">
                 {(() => {
@@ -1733,29 +1808,63 @@ export function StockPortfolio() {
         </div>
       </div>
 
-      {/* 월별 매도 현황 */}
-      <Card className="p-5">
-        <div className="flex items-end justify-between gap-3 mb-4 flex-wrap">
-          <h2 className="text-2xl">월별 매도 현황</h2>
-          <div className="text-xs text-muted-foreground">단위: 원</div>
+      {/* 월별 매도 현황 — 계좌별 */}
+      <Card className="overflow-hidden">
+        <div className="flex items-end justify-between gap-3 border-b border-border px-5 py-3.5">
+          <div className="leading-tight">
+            <div className="eyebrow">Realized P/L by Account</div>
+            <h2>월별 매도 현황 — 계좌별</h2>
+          </div>
+          <div className="text-xs text-muted-foreground">단위: 원 (실현손익)</div>
         </div>
+        <div className="grid grid-cols-1 gap-5 px-5 py-4 lg:grid-cols-2">
+          {monthlyRealizedPnL.byAccount.map((acc) => {
+            const accYearTotal = acc.rows.reduce((s, r) => s + r.pnlKRW, 0);
+            return (
+              <div key={acc.accountId} className="rounded-lg border border-border">
+                <div className="flex items-center justify-between border-b border-border bg-secondary/40 px-4 py-2.5">
+                  <span className="text-sm font-semibold">{acc.name}</span>
+                  <span className={`tnum text-sm font-semibold ${accYearTotal >= 0 ? 'text-gain' : 'text-loss'}`}>
+                    연간 {fmt0(accYearTotal)}원
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5 p-3 sm:grid-cols-4">
+                  {acc.rows.map((item) => (
+                    <div key={item.month} className="flex items-center justify-between gap-1 rounded-md bg-secondary/40 px-2.5 py-1.5">
+                      <span className="text-[11px] text-muted-foreground">{item.month}월</span>
+                      <span className={`tnum text-xs font-medium ${item.pnlKRW === 0 ? 'text-muted-foreground/50' : item.pnlKRW > 0 ? 'text-gain' : 'text-loss'}`}>
+                        {fmt0(item.pnlKRW)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
 
-        {/* ✅ 부피 줄인 컴팩트 입력 (복제 기능 제거) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-          {monthlyRealizedPnLKRW.map((item) => (
+      {/* 월별 매도 현황 — 전체 합계 */}
+      <Card className="overflow-hidden">
+        <div className="flex items-end justify-between gap-3 border-b border-border px-5 py-3.5">
+          <div className="leading-tight">
+            <div className="eyebrow">Realized P/L Total</div>
+            <h2>월별 매도 현황 — 전체 합계</h2>
+          </div>
+          <span className={`tnum text-sm font-semibold ${monthlyRealizedPnL.total.reduce((s, r) => s + r.pnlKRW, 0) >= 0 ? 'text-gain' : 'text-loss'}`}>
+            연간 {fmt0(monthlyRealizedPnL.total.reduce((s, r) => s + r.pnlKRW, 0))}원
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 px-5 py-4 sm:grid-cols-3 lg:grid-cols-4">
+          {monthlyRealizedPnL.total.map((item) => (
             <div
               key={item.month}
-              className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-secondary/60 border"
+              className="flex items-center justify-between gap-2 rounded-md border border-border bg-secondary/40 px-3 py-2"
             >
-              <div className="text-sm font-semibold text-foreground/80">{item.month}월</div>
-              <Input
-                readOnly
-                value={fmt0(item.pnlKRW)}
-                className={
-                  "w-28 h-9 text-sm text-right bg-white " +
-                  (item.pnlKRW >= 0 ? 'text-gain font-semibold' : 'text-loss font-semibold')
-                }
-              />
+              <span className="text-sm font-medium text-foreground/80">{item.month}월</span>
+              <span className={`tnum text-sm font-semibold ${item.pnlKRW === 0 ? 'text-muted-foreground/50' : item.pnlKRW > 0 ? 'text-gain' : 'text-loss'}`}>
+                {fmt0(item.pnlKRW)}
+              </span>
             </div>
           ))}
         </div>
@@ -1993,7 +2102,7 @@ export function StockPortfolio() {
                         순입금액 ₩ {fmt0(netCashFlow)} · 현재 평가금액 ₩ {fmt0(valuation)}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        주식 ₩ {fmt0(stockValuation)} · 현금 ₩ {fmt0(account.cashHoldings)}
+                        주식 ₩ {fmt0(stockValuation)} · 현금 ₩ {fmt0(getEffectiveCashKRW(account))}
                       </div>
                       <div className={`text-sm font-semibold mt-1 ${pnl >= 0 ? 'text-gain' : 'text-loss'}`}>
                         {pnl >= 0 ? '수익' : '손실'} ₩ {fmt0(pnl)} ({fmtPct(pct)})

@@ -100,18 +100,42 @@ export function CardFooter({ className, ...props }: React.ComponentProps<'div'>)
 }
 
 // ============================================================
-// Input — 화이트 + 헤어라인, 포커스 시 잉크 보더
+// Input — 화이트 + 헤어라인, 포커스 시 웜 링
+// ✅ 입력 중에는 화면 값을 외부 상태가 덮어쓰지 않도록 draft 유지
+//    - "25.0" 입력 시 소수점 뒤 0이 사라지던 문제 해결
+//    - 한글 IME 조합이 끊기던 문제 해결
+// ✅ type="number"는 자동으로 고정폭 숫자 + 우측 정렬
 // ============================================================
-export function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
+export function Input({ className, type, value, onChange, onFocus, onBlur, ...props }: React.ComponentProps<'input'>) {
+  const [draft, setDraft] = React.useState<string | null>(null);
+  const isControlled = value !== undefined;
+  const isEditing = isControlled && draft !== null;
+
   return (
     <input
       type={type}
       data-slot="input"
+      value={isControlled ? (isEditing ? draft : (value as any) ?? '') : undefined}
+      onFocus={(e) => {
+        if (isControlled) setDraft(e.currentTarget.value);
+        onFocus?.(e);
+      }}
+      onChange={(e) => {
+        if (isControlled) setDraft(e.currentTarget.value);
+        onChange?.(e);
+      }}
+      onBlur={(e) => {
+        setDraft(null);
+        onBlur?.(e);
+      }}
       className={cn(
-        'placeholder:text-muted-foreground/70 selection:bg-primary selection:text-primary-foreground flex h-9 w-full min-w-0 rounded-md border border-border bg-input-background px-3 py-1 text-sm transition-colors outline-none',
+        'placeholder:text-muted-foreground/60 selection:bg-primary selection:text-primary-foreground flex h-9 w-full min-w-0 rounded-md border border-border bg-input-background px-3 py-1 text-sm shadow-[inset_0_1px_2px_rgba(85,68,40,0.04)] transition-[border-color,box-shadow] outline-none',
+        type === 'number' && 'tnum text-right',
         'file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium',
         'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
-        'focus-visible:border-foreground/40 focus-visible:ring-2 focus-visible:ring-ring/40',
+        'read-only:bg-secondary/40 read-only:shadow-none',
+        'hover:border-ring/70',
+        'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 focus-visible:bg-card',
         'aria-invalid:border-destructive aria-invalid:ring-destructive/20',
         className
       )}

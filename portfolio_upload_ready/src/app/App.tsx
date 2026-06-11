@@ -308,14 +308,14 @@ export default function App() {
             </TabsTrigger>
           </TabsList>
 
-          {/* 월 선택 — 세그먼트 컨트롤 */}
+          {/* 월 선택 — 전폭 12등분 세그먼트 */}
           {activeTab === 'budget' && (
-            <div className="mb-6 inline-flex flex-wrap items-center gap-1 rounded-lg border border-border bg-card p-1">
+            <div className="mb-6 grid w-full grid-cols-6 gap-1 rounded-lg border border-border bg-card p-1 md:grid-cols-12">
               {MONTHS.map(({ value, label }) => (
                 <button
                   key={value}
                   onClick={() => setSelectedMonth(value)}
-                  className={`tnum min-w-[52px] rounded-md px-3 py-1.5 text-sm transition-colors ${
+                  className={`tnum rounded-md px-1 py-1.5 text-center text-sm transition-colors ${
                     selectedMonth === value
                       ? 'bg-primary font-medium text-primary-foreground'
                       : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
